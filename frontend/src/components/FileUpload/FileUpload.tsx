@@ -377,16 +377,90 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
             Select MP4/M4A/MOV File
           </label>
           <input
+            ref={fileInputRef}
             type="file"
             accept=".mp4,.m4a,.mov"
             onChange={handleFileChange}
             disabled={processing}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            className="hidden"
           />
-          {file && (
-            <p className="mt-2 text-sm text-gray-600">
-              Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-            </p>
+
+          {!file ? (
+            <div
+              onClick={handleDropZoneClick}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`
+                relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
+                transition-all duration-300 ease-in-out
+                ${isDragging
+                  ? 'border-purple-500 bg-purple-50 scale-[1.02]'
+                  : 'border-gray-300 hover:border-purple-400 hover:bg-gray-50'
+                }
+                ${processing ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+            >
+              <div className="flex flex-col items-center gap-3">
+                <div className={`
+                  w-16 h-16 rounded-full flex items-center justify-center
+                  transition-all duration-300
+                  ${isDragging ? 'bg-purple-100 scale-110' : 'bg-gray-100'}
+                `}>
+                  <svg
+                    className={`w-8 h-8 transition-colors ${isDragging ? 'text-purple-600' : 'text-gray-400'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className={`text-sm font-medium ${isDragging ? 'text-purple-600' : 'text-gray-700'}`}>
+                    {isDragging ? 'Drop your file here!' : 'Drag & drop your file here'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    or click to browse
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="px-2 py-1 bg-gray-100 rounded">MP4</span>
+                  <span className="px-2 py-1 bg-gray-100 rounded">M4A</span>
+                  <span className="px-2 py-1 bg-gray-100 rounded">MOV</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl p-4 bg-gradient-to-r from-purple-50 to-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.828-9.9a9 9 0 0112.728 0" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                  <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+                {!processing && (
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
           )}
         </div>
 

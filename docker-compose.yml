@@ -39,13 +39,13 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       GCS_BUCKET_NAME: transcripto-audio-files
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
       - static_files:/app/static
     ports:
-      - "8000:8000"
+      - "8005:8000"
     command: python manage.py runserver 0.0.0.0:8000
 
   celery:
@@ -60,7 +60,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       GCS_BUCKET_NAME: transcripto-audio-files
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
@@ -71,12 +71,12 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      NEXT_PUBLIC_API_URL: http://localhost:8005/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "3005:3000"
     command: npm run dev
 
 volumes:
