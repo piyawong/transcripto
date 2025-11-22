@@ -23,6 +23,7 @@ from apps.transcription.tasks import (
     combine_chunks_task
 )
 from apps.transcription.services.gcs_service import GCSService
+from apps.notifications.tasks import send_notification_email
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -104,6 +105,9 @@ class TaskViewSet(viewsets.ModelViewSet):
             # Check if this is a chunked upload
             chunks_info = request.data.get('chunks_info', [])
             is_chunked = len(chunks_info) > 0
+
+            # Send "started" email with tracking link immediately
+            send_notification_email.delay(str(task.id), "started")
 
             if is_chunked:
                 # Chunked upload: wait for chunks to be uploaded

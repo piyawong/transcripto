@@ -35,11 +35,7 @@ def process_transcription_task(self, task_id: str) -> Dict[str, Any]:
         task.started_at = timezone.now()
         task.save()
 
-        # Import here to avoid circular dependency
-        from apps.notifications.tasks import send_notification_email
-
-        # Send start notification
-        send_notification_email.delay(task_id, "started")
+        # Note: "started" email is sent from view when task is created
 
         # Step 1: Prepare chunks (10%)
         self.update_state(

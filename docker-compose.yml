@@ -4,13 +4,13 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: transcripto
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -33,13 +33,13 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/transcripto
-      REDIS_URL: redis://redis:6379
-      DJANGO_SETTINGS_MODULE: core.settings.development
-      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
-      GCS_BUCKET_NAME: transcripto-audio-files
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://http://207.148.121.83/:3005}
+      FRONTEND_URL: ${FRONTEND_URL}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
@@ -54,13 +54,13 @@ services:
       - redis
       - db
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/transcripto
-      REDIS_URL: redis://redis:6379
-      DJANGO_SETTINGS_MODULE: core.settings.development
-      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
-      GCS_BUCKET_NAME: transcripto-audio-files
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://http://207.148.121.83/:3005}
+      FRONTEND_URL: ${FRONTEND_URL}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
@@ -71,7 +71,7 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://http://207.148.121.83/:8005/api
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     volumes:
       - ./frontend:/app
       - /app/node_modules
