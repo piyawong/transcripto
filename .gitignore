@@ -1,0 +1,45 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Credentials - NEVER commit these
+credentials/
+**/credentials/
+*.pem
+*.key
+*-service-account.json
+service-account.json
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Playwright MCP
+.playwright-mcp/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# CORS config (if contains sensitive origins)
+cors.json
+
+test_files/*

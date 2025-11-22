@@ -1,0 +1,85 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: transcripto
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/transcripto
+      REDIS_URL: redis://redis:6379
+      DJANGO_SETTINGS_MODULE: core.settings.development
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      GCS_BUCKET_NAME: transcripto-audio-files
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./backend:/app
+      - ./credentials:/app/credentials:ro
+      - static_files:/app/static
+    ports:
+      - "8000:8000"
+    command: python manage.py runserver 0.0.0.0:8000
+
+  celery:
+    build: ./backend
+    depends_on:
+      - redis
+      - db
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/transcripto
+      REDIS_URL: redis://redis:6379
+      DJANGO_SETTINGS_MODULE: core.settings.development
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      GCS_BUCKET_NAME: transcripto-audio-files
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./backend:/app
+      - ./credentials:/app/credentials:ro
+    command: celery -A core worker -l info
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_files:
