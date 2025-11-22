@@ -39,7 +39,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       GCS_BUCKET_NAME: transcripto-audio-files
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
+      FRONTEND_URL: ${FRONTEND_URL:-http://http://207.148.121.83/:3005}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
@@ -60,7 +60,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       GCS_BUCKET_NAME: transcripto-audio-files
       RESEND_API_KEY: ${RESEND_API_KEY}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
+      FRONTEND_URL: ${FRONTEND_URL:-http://http://207.148.121.83/:3005}
     volumes:
       - ./backend:/app
       - ./credentials:/app/credentials:ro
@@ -71,7 +71,7 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8005/api
+      NEXT_PUBLIC_API_URL: http://http://207.148.121.83/:8005/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
