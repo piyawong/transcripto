@@ -24,7 +24,7 @@ interface ChunkBlob {
 }
 
 // Configuration
-const CHUNK_DURATION_SECONDS = 30; // 30 second chunks
+const CHUNK_DURATION_SECONDS = 30 * 60; // 30 minute chunks (1800 seconds)
 const MAX_CONCURRENT_UPLOADS = 3;
 
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
