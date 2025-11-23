@@ -79,28 +79,27 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   };
 
   const getAudioDuration = async (ffmpeg: FFmpeg): Promise<number> => {
-    // Get duration from WAV file by checking the file info
-    try {
-      // Use ffprobe-like command to get duration
-      await ffmpeg.exec(['-i', 'output.wav', '-f', 'null', '-']);
-    } catch {
-      // FFmpeg throws on certain outputs, we'll estimate based on file size
-    }
-
-    // Read the WAV file to get actual duration from header
+    // Read the WAV file
     const wavData = await ffmpeg.readFile('output.wav');
-    const dataView = new DataView((wavData as Uint8Array).buffer);
+    const fileSize = (wavData as Uint8Array).length;
 
-    // WAV header: bytes 28-31 = byte rate, bytes 40-43 = data size
-    const byteRate = dataView.getUint32(28, true);
-    const dataSize = dataView.getUint32(40, true);
+    // For 16kHz mono 16-bit WAV:
+    // - Sample rate: 16000 Hz
+    // - Bits per sample: 16 (2 bytes)
+    // - Channels: 1 (mono)
+    // - Byte rate = 16000 * 2 * 1 = 32000 bytes/sec
+    // - WAV header is typically 44 bytes
+    const BYTE_RATE = 32000; // 16kHz * 2 bytes * 1 channel
+    const HEADER_SIZE = 44;
 
-    if (byteRate > 0) {
-      return Math.ceil(dataSize / byteRate);
-    }
+    const dataSize = fileSize - HEADER_SIZE;
+    const durationSeconds = Math.ceil(dataSize / BYTE_RATE);
 
-    // Fallback: estimate from file size (16-bit mono 16kHz = 32000 bytes/sec)
-    return Math.ceil((wavData as Uint8Array).length / 32000);
+    console.log(`[Transcripto] WAV file size: ${fileSize} bytes`);
+    console.log(`[Transcripto] Data size: ${dataSize} bytes`);
+    console.log(`[Transcripto] Calculated duration: ${durationSeconds} seconds (${(durationSeconds/60).toFixed(1)} minutes)`);
+
+    return durationSeconds;
   };
 
   const convertAndSplitToChunks = async (inputFile: File): Promise<{
@@ -134,6 +133,9 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     // Calculate number of chunks
     const numChunks = Math.ceil(totalDuration / CHUNK_DURATION_SECONDS);
     setTotalChunks(numChunks);
+
+    console.log(`[Transcripto] CHUNK_DURATION_SECONDS: ${CHUNK_DURATION_SECONDS}`);
+    console.log(`[Transcripto] Total duration: ${totalDuration} sec, Chunks needed: ${numChunks}`);
 
     // If only 1 chunk needed, return the full file
     if (numChunks <= 1) {
