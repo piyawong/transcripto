@@ -6,6 +6,9 @@ import { apiClient } from '@/lib/api';
 import { ShimmerButton } from '@/components/ui/shimmer-button';
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar';
 import { AnimatedGradientText } from '@/components/ui/animated-gradient-text';
+import { VideoTrimmer } from '@/components/VideoTrimmer';
+import type { TrimRange } from '@/components/VideoTrimmer';
+import { DropZone } from './DropZone';
 
 interface FileUploadProps {
   onUploadComplete?: (taskId: string) => void;
@@ -38,7 +41,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [error, setError] = useState('');
   const [chunksUploaded, setChunksUploaded] = useState(0);
   const [totalChunks, setTotalChunks] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const [trimRange, setTrimRange] = useState<TrimRange | null>(null);
   const ffmpegRef = useRef<any>(null);
   const ffmpegLoaded = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +49,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const loadFFmpeg = async () => {
     if (ffmpegLoaded.current && ffmpegRef.current) return;
 
-    // Dynamically import FFmpeg only on client side
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
     const { toBlobURL } = await import('@ffmpeg/util');
 
@@ -66,11 +68,11 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     ffmpegLoaded.current = true;
   };
 
-  const validateFile = (file: File): boolean => {
+  const validateFile = (selectedFile: File): boolean => {
     const validTypes = ['video/mp4', 'audio/m4a', 'video/quicktime'];
-    const ext = file.name.toLowerCase().split('.').pop();
+    const ext = selectedFile.name.toLowerCase().split('.').pop();
 
-    if (!validTypes.includes(file.type) && !['mp4', 'm4a', 'mov'].includes(ext || '')) {
+    if (!validTypes.includes(selectedFile.type) && !['mp4', 'm4a', 'mov'].includes(ext || '')) {
       setError('Please upload an MP4, M4A, or MOV file');
       return false;
     }
@@ -78,18 +80,14 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     return true;
   };
 
-  const getAudioDuration = async (ffmpeg: FFmpeg): Promise<number> => {
-    // Read the WAV file
+  const getAudioDuration = async (ffmpeg: any): Promise<number> => {
     const wavData = await ffmpeg.readFile('output.wav');
     const fileSize = (wavData as Uint8Array).length;
 
     // For 16kHz mono 16-bit WAV:
-    // - Sample rate: 16000 Hz
-    // - Bits per sample: 16 (2 bytes)
-    // - Channels: 1 (mono)
-    // - Byte rate = 16000 * 2 * 1 = 32000 bytes/sec
-    // - WAV header is typically 44 bytes
-    const BYTE_RATE = 32000; // 16kHz * 2 bytes * 1 channel
+    // Byte rate = 16000 * 2 * 1 = 32000 bytes/sec
+    // WAV header is typically 44 bytes
+    const BYTE_RATE = 32000;
     const HEADER_SIZE = 44;
 
     const dataSize = fileSize - HEADER_SIZE;
@@ -102,7 +100,15 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     return durationSeconds;
   };
 
-  const convertAndSplitToChunks = async (inputFile: File): Promise<{
+  /**
+   * Convert input file to WAV and split into chunks.
+   * When trimStart/trimEnd are provided, only the trimmed portion is converted.
+   */
+  const convertAndSplitToChunks = async (
+    inputFile: File,
+    trimStart?: number,
+    trimEnd?: number,
+  ): Promise<{
     chunks: ChunkBlob[];
     totalDuration: number;
     totalSize: number;
@@ -110,34 +116,33 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     const ffmpeg = ffmpegRef.current;
     const { fetchFile } = await import('@ffmpeg/util');
 
-    // Write input file to FFmpeg virtual filesystem
     await ffmpeg.writeFile('input.mp4', await fetchFile(inputFile));
 
-    // First, convert entire file to WAV
+    // Build FFmpeg args with optional trim params
     setCurrentStep('Converting to WAV format...');
-    await ffmpeg.exec([
-      '-i', 'input.mp4',
-      '-acodec', 'pcm_s16le',
-      '-ar', '16000',
-      '-ac', '1',
-      'output.wav'
-    ]);
+    const ffmpegArgs = ['-i', 'input.mp4'];
 
-    // Get total duration
+    // Reason: Add -ss/-t before output to trim at the input stage for faster conversion
+    if (trimStart != null && trimEnd != null && (trimStart > 0 || trimEnd < Infinity)) {
+      ffmpegArgs.push('-ss', trimStart.toString());
+      ffmpegArgs.push('-t', (trimEnd - trimStart).toString());
+      console.log(`[Transcripto] Trimming: ${trimStart}s to ${trimEnd}s (${trimEnd - trimStart}s)`);
+    }
+
+    ffmpegArgs.push('-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', 'output.wav');
+
+    await ffmpeg.exec(ffmpegArgs);
+
     const totalDuration = await getAudioDuration(ffmpeg);
-
-    // Read full WAV to get size
     const fullWavData = await ffmpeg.readFile('output.wav');
     const totalSize = (fullWavData as Uint8Array).length;
 
-    // Calculate number of chunks
     const numChunks = Math.ceil(totalDuration / CHUNK_DURATION_SECONDS);
     setTotalChunks(numChunks);
 
     console.log(`[Transcripto] CHUNK_DURATION_SECONDS: ${CHUNK_DURATION_SECONDS}`);
     console.log(`[Transcripto] Total duration: ${totalDuration} sec, Chunks needed: ${numChunks}`);
 
-    // If only 1 chunk needed, return the full file
     if (numChunks <= 1) {
       return {
         chunks: [{
@@ -154,7 +159,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       };
     }
 
-    // Split into chunks
     setCurrentStep(`Splitting into ${numChunks} chunks...`);
     const chunks: ChunkBlob[] = [];
 
@@ -165,7 +169,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
       setConversionProgress(Math.round(((i + 1) / numChunks) * 100));
 
-      // Extract chunk
       await ffmpeg.exec([
         '-i', 'output.wav',
         '-ss', startTime.toString(),
@@ -176,7 +179,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         `chunk_${i}.wav`
       ]);
 
-      // Read chunk data
       const chunkData = await ffmpeg.readFile(`chunk_${i}.wav`);
       const chunkBlob = new Blob([chunkData], { type: 'audio/wav' });
 
@@ -190,11 +192,9 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         }
       });
 
-      // Clean up chunk file to save memory
       await ffmpeg.deleteFile(`chunk_${i}.wav`);
     }
 
-    // Clean up
     await ffmpeg.deleteFile('input.mp4');
     await ffmpeg.deleteFile('output.wav');
 
@@ -209,7 +209,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     const { blob, info } = chunk;
     const filename = `chunk_${info.chunk_index}.wav`;
 
-    // Get signed URL for this chunk
     const { upload_url, gcs_uri } = await apiClient.getChunkUploadUrl(
       taskId,
       info.chunk_index,
@@ -217,12 +216,10 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       blob.size
     );
 
-    // Upload to GCS
     await apiClient.uploadToGCS(upload_url, blob, (percent) => {
       onProgress(info.chunk_index, percent);
     });
 
-    // Notify backend that chunk is uploaded
     await apiClient.notifyChunkUploaded(taskId, {
       chunk_index: info.chunk_index,
       gcs_uri,
@@ -247,7 +244,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       updateOverallProgress();
     };
 
-    // Upload in batches to avoid overwhelming the browser
     for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_UPLOADS) {
       const batch = chunks.slice(i, i + MAX_CONCURRENT_UPLOADS);
 
@@ -261,50 +257,26 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && validateFile(selectedFile)) {
+  const handleFileSelect = useCallback((selectedFile: File) => {
+    if (validateFile(selectedFile)) {
       setFile(selectedFile);
       setError('');
+      setTrimRange(null);
     }
-  };
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!processing) {
-      setIsDragging(true);
-    }
-  }, [processing]);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    if (processing) return;
-
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && validateFile(droppedFile)) {
-      setFile(droppedFile);
-      setError('');
-    }
-  }, [processing]);
-
-  const handleDropZoneClick = () => {
-    if (!processing && fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) handleFileSelect(selectedFile);
   };
+
+  const handleTrimChange = useCallback((range: TrimRange) => {
+    setTrimRange(range);
+  }, []);
 
   const removeFile = () => {
     setFile(null);
+    setTrimRange(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -326,17 +298,18 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     setTotalChunks(0);
 
     try {
-      // Step 1: Load FFmpeg if not loaded
       setCurrentStep('Initializing audio processor...');
       await loadFFmpeg();
 
-      // Step 2: Convert and split into chunks
       setCurrentStep('Converting and splitting audio...');
-      const { chunks, totalDuration, totalSize } = await convertAndSplitToChunks(file);
+      const { chunks, totalDuration, totalSize } = await convertAndSplitToChunks(
+        file,
+        trimRange?.startTime,
+        trimRange?.endTime,
+      );
 
       setCurrentStep(`Created ${chunks.length} chunks. Preparing upload...`);
 
-      // Step 3: Create task with chunk info
       const response = await apiClient.createTaskWithChunks({
         email,
         original_filename: file.name,
@@ -348,7 +321,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
       const taskId = response.task_id;
 
-      // Step 4: Upload chunks in parallel
       setCurrentStep(`Uploading ${chunks.length} chunks...`);
       await uploadChunksInParallel(taskId, chunks);
 
@@ -358,7 +330,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         onUploadComplete(taskId);
       }
 
-      // Redirect to progress page
       router.push(`/progress/${taskId}`);
     } catch (err: any) {
       console.error('Processing error:', err);
@@ -388,80 +359,43 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           />
 
           {!file ? (
-            <div
-              onClick={handleDropZoneClick}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`
-                relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
-                transition-all duration-300 ease-in-out
-                ${isDragging
-                  ? 'border-purple-500 bg-purple-50 scale-[1.02]'
-                  : 'border-gray-300 hover:border-purple-400 hover:bg-gray-50'
-                }
-                ${processing ? 'opacity-50 cursor-not-allowed' : ''}
-              `}
-            >
-              <div className="flex flex-col items-center gap-3">
-                <div className={`
-                  w-16 h-16 rounded-full flex items-center justify-center
-                  transition-all duration-300
-                  ${isDragging ? 'bg-purple-100 scale-110' : 'bg-gray-100'}
-                `}>
-                  <svg
-                    className={`w-8 h-8 transition-colors ${isDragging ? 'text-purple-600' : 'text-gray-400'}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className={`text-sm font-medium ${isDragging ? 'text-purple-600' : 'text-gray-700'}`}>
-                    {isDragging ? 'Drop your file here!' : 'Drag & drop your file here'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    or click to browse
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <span className="px-2 py-1 bg-gray-100 rounded">MP4</span>
-                  <span className="px-2 py-1 bg-gray-100 rounded">M4A</span>
-                  <span className="px-2 py-1 bg-gray-100 rounded">MOV</span>
-                </div>
-              </div>
-            </div>
+            <DropZone
+              onFileSelect={handleFileSelect}
+              disabled={processing}
+              fileInputRef={fileInputRef}
+            />
           ) : (
-            <div className="border border-gray-200 rounded-xl p-4 bg-gradient-to-r from-purple-50 to-blue-50">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.828-9.9a9 9 0 0112.728 0" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
-                  <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-                {!processing && (
-                  <button
-                    type="button"
-                    onClick={removeFile}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <div className="space-y-3">
+              {/* File info card */}
+              <div className="border border-gray-200 rounded-xl p-4 bg-gradient-to-r from-purple-50 to-blue-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.828-9.9a9 9 0 0112.728 0" />
                     </svg>
-                  </button>
-                )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                    <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                  {!processing && (
+                    <button
+                      type="button"
+                      onClick={removeFile}
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Video trimmer */}
+              {!processing && (
+                <VideoTrimmer file={file} onTrimChange={handleTrimChange} />
+              )}
             </div>
           )}
         </div>
@@ -491,7 +425,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded">
             <p className="text-sm font-medium">{currentStep}</p>
 
-            {/* Conversion Progress */}
             {conversionProgress > 0 && conversionProgress < 100 && (
               <div className="mt-2 flex items-center gap-4">
                 <AnimatedCircularProgressBar
@@ -508,7 +441,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
               </div>
             )}
 
-            {/* Upload Progress */}
             {uploadProgress > 0 && (
               <div className="mt-2 flex items-center gap-4">
                 <AnimatedCircularProgressBar

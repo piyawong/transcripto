@@ -6,6 +6,24 @@
 
 ## Completed
 
+### Video Trimmer Feature - 2026-03-16 ✓
+- ✓ Created VideoTrimmer component with video preview and dual-handle range slider
+  - `VideoTrimmer/types.ts` - TrimRange, Props interfaces
+  - `VideoTrimmer/utils.ts` - formatTime(), getStepSize() helpers
+  - `VideoTrimmer/TimeDisplay.tsx` - Formatted time label component
+  - `VideoTrimmer/RangeSlider.tsx` - Dual-handle range slider with purple track highlight
+  - `VideoTrimmer/VideoTrimmer.tsx` - Main component with video preview + trim controls
+  - `VideoTrimmer/index.ts` - Barrel exports
+- ✓ Extracted DropZone component from FileUpload
+  - `FileUpload/DropZone.tsx` - Drag-drop zone as standalone component
+  - `FileUpload/index.ts` - Barrel exports
+- ✓ Modified FileUpload to integrate VideoTrimmer
+  - Added trimRange state, renders VideoTrimmer when file selected
+  - convertAndSplitToChunks now accepts trimStart/trimEnd params
+  - FFmpeg command uses -ss/-t for trimming before conversion
+  - trimRange resets on removeFile()
+  - Backward compatible: untouched trimmer = full file conversion
+
 ### Frontend Chunking Architecture - 2025-11-22 ✓
 - ✓ Updated Database schema - Added TranscriptionChunk model
 - ✓ Added chunk fields to TranscriptionTask (total_chunks, chunks_uploaded, chunks_processed)
