@@ -34,6 +34,8 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 .powered:hover { color: var(--ink-2); background: var(--sunken); }
 .powered:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .powered img { display: block; width: auto; height: 24px; }
+/* Centring the boxes leaves the wordmark's baseline 3px below the text's (measured); drop the text onto it. */
+.powered > span:first-child { transform: translateY(3px); }
 .login-pane { flex-direction: column; gap: 28px; }
 
 /* transcript: edit a line (pencil beside the seek button; the line becomes a text box) */
