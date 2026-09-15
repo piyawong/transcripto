@@ -29,6 +29,8 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 .view-enter .side-col { animation: slideInR .55s var(--ease-out) .1s both; }
 
 /* transcript: edit a line (pencil beside the seek button; the line becomes a text box) */
+.tx-head .sec-title { flex-wrap: wrap; row-gap: 2px; }
+.tx-head .sec-title h2 { white-space: nowrap; }
 .tx li.can-edit { position: relative; }
 .tx li.can-edit .seg { padding-right: 44px; }
 .seg-edit { position: absolute; top: 4px; right: 2px; width: 36px; height: 36px; opacity: 0; transition: opacity .15s, background-color .15s, color .15s; }
