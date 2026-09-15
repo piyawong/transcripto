@@ -85,6 +85,16 @@ export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSee
 
   return (
     <div className="sum" data-testid="summary">
+      {job.summary_stale && (
+        <div className="sum-stale" role="status" data-testid="summary-stale">
+          <Icon name="info" />
+          <p>ทรานสคริปต์ถูกแก้ไขหลังสรุปครั้งล่าสุด สรุปด้านล่างอาจยังใช้ข้อความหรือชื่อเดิม</p>
+          <button className="btn btn-primary btn-sm" type="button" onClick={retry} disabled={busy} data-testid="btn-resummarize">
+            <Icon name="refresh" />
+            สรุปใหม่จากข้อความที่แก้
+          </button>
+        </div>
+      )}
       <div className="sum-tools">
         <button
           className="btn btn-secondary btn-sm"
@@ -112,7 +122,7 @@ export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSee
           <Icon name="copy" />
           คัดลอก
         </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={retry} disabled={busy} title="ให้ AI สรุปใหม่จากทรานสคริปต์ล่าสุด (รวมชื่อผู้พูดที่แก้ไว้)">
+        <button className="btn btn-ghost btn-sm" type="button" onClick={retry} disabled={busy} title="ให้ AI สรุปใหม่จากทรานสคริปต์ล่าสุด (รวมข้อความและชื่อผู้พูดที่แก้ไว้)">
           <Icon name="refresh" />
           สรุปใหม่
         </button>

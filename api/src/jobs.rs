@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -100,6 +101,39 @@ pub struct JobDetail {
     pub summary: Option<Value>,
     pub summary_text: Option<String>,
     pub summary_meta: Option<Value>,
+    /// The transcript was edited or a speaker renamed after the summary was made.
+    pub summary_stale: bool,
+}
+
+/// Longest text of one transcript line a user may save.
+pub const MAX_SEGMENT_CHARS: usize = 2000;
+
+/// The text the summary step sends to Gemini for these segments and speakers.
+pub fn summary_input(segments: &[SegmentRow], speakers: &[SpeakerView]) -> String {
+    let segs: Vec<crate::transcript::Segment> = segments
+        .iter()
+        .map(|s| crate::transcript::Segment { start: s.start_sec, end: s.end_sec, speaker: s.speaker as usize, text: s.text.clone() })
+        .collect();
+    let people: Vec<crate::transcript::Speaker> =
+        speakers.iter().map(|s| crate::transcript::Speaker { label: s.label.clone(), name: s.name.clone(), role: s.role.clone() }).collect();
+    crate::transcript::transcript_for_summary(&segs, &people)
+}
+
+/// Stored in summary_meta.transcript_hash so later edits can be detected.
+pub fn text_hash(text: &str) -> String {
+    Sha256::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// A finished summary was made from a different transcript than the stored one. Summaries made before the hash
+/// was recorded are never reported stale.
+pub fn summary_stale(job: &Job, segments: &[SegmentRow]) -> bool {
+    job.summary_status == STATUS_DONE
+        && job
+            .summary_meta
+            .as_ref()
+            .and_then(|m| m.get("transcript_hash"))
+            .and_then(Value::as_str)
+            .is_some_and(|h| h != text_hash(&summary_input(segments, &job.speakers.0)))
 }
 
 impl Job {
@@ -184,4 +218,20 @@ pub async fn segments(db: &PgPool, id: Uuid) -> sqlx::Result<Vec<SegmentRow>> {
         .bind(id)
         .fetch_all(db)
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn summary_input_follows_edits_and_renames() {
+        let seg = |text: &str| SegmentRow { start_sec: 16.0, end_sec: 20.0, speaker: 0, text: text.into() };
+        let mut people = vec![SpeakerView { label: "ผู้พูด 1".into(), name: "ผู้พูด 1".into(), role: None, talk_sec: 4.0, pct: 1.0 }];
+        let before = summary_input(&[seg("สวัสดีครับ")], &people);
+        assert_eq!(before, "[00:16] ผู้พูด 1: สวัสดีครับ\n\n## ผู้พูด\nผู้พูด 1: ไม่ทราบ\n");
+        assert_ne!(text_hash(&before), text_hash(&summary_input(&[seg("สวัสดีค่ะ")], &people)));
+        people[0].name = "คุณเอ".into();
+        assert!(summary_input(&[seg("สวัสดีครับ")], &people).ends_with("ผู้พูด 1: คุณเอ\n"));
+    }
 }

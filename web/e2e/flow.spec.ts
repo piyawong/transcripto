@@ -100,6 +100,41 @@ test("upload a video, watch it process, then use player, transcript, summary and
   await expect(page.getByTestId("speakers").locator(".spk").first()).toContainText(newName);
   await expect(page.getByTestId("transcript")).toContainText(newName);
 
+  // ---- edit a transcript line: Esc cancels, Enter saves, and the edit survives a reload
+  const lastIdx = n - 1;
+  const lastText = page.locator(`.seg[data-i="${lastIdx}"] .seg-text`);
+  const original = (await lastText.innerText()).trim();
+  await page.getByTestId("transcript").locator("li").nth(lastIdx).hover();
+  await page.locator(`[data-edit="${lastIdx}"]`).click();
+  const input = page.getByTestId("seg-input");
+  await expect(input).toBeFocused();
+  await input.fill("ไม่บันทึกข้อความนี้");
+  await input.press("Escape");
+  await expect(input).toHaveCount(0);
+  await expect(lastText).toHaveText(original);
+  await expect(page.locator(`[data-edit="${lastIdx}"]`)).toBeFocused();
+  const edited = `ข้อความที่แก้ด้วยมือ ${newName} ครับ`;
+  await page.locator(`[data-edit="${lastIdx}"]`).click();
+  await page.getByTestId("seg-input").fill(`  ${edited}\n`);
+  await page.getByTestId("seg-save").click();
+  await expect(page.getByTestId("toast").filter({ hasText: "บันทึกข้อความแล้ว" })).toBeVisible();
+  await expect(lastText).toHaveText(edited);
+
+  // ---- renaming a speaker also replaces the old name inside the text, and can be undone
+  const renamed = `คุณแก้ชื่อ ${Date.now() % 1000}`;
+  await page.locator('[data-rename="0"]').click();
+  await page.locator("#rn-0").fill(renamed);
+  await page.locator("#rn-0").press("Enter");
+  const renameToast = page.getByTestId("toast").filter({ hasText: "แก้ในข้อความ" });
+  await expect(renameToast).toContainText(renamed);
+  await expect(lastText).toHaveText(`ข้อความที่แก้ด้วยมือ ${renamed} ครับ`);
+  await renameToast.getByRole("button", { name: "เลิกทำ" }).click();
+  await expect(lastText).toHaveText(edited);
+  await expect(page.getByTestId("speakers").locator(".spk").first()).toContainText(newName);
+  await page.reload();
+  await expect(lastText).toHaveText(edited);
+  await expect(page.getByTestId("speakers").locator(".spk").first()).toContainText(newName);
+
   // ---- transcript download (.txt and .csv)
   await page.getByTestId("btn-download").click();
   const dlg = page.locator("dialog.dlg");
@@ -123,6 +158,8 @@ test("upload a video, watch it process, then use player, transcript, summary and
   // ---- meeting summary sits under the transcript (no tabs) and scrolls inside its own box
   const summary = page.getByTestId("summary");
   await expect(summary).toBeVisible();
+  // the summary was made before the edits above, so it offers to summarize again
+  await expect(page.getByTestId("summary-stale")).toBeVisible();
   await expect(page.getByTestId("transcript")).toBeVisible();
   const box = await page.getByTestId("summary-scroll").evaluate((el) => ({
     scrolls: el.scrollHeight > el.clientHeight + 20,
@@ -157,6 +194,11 @@ test("upload a video, watch it process, then use player, transcript, summary and
   await summary.locator(".stamp").first().click();
   await expect.poll(async () => video.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
   await page.getByTestId("c-play").click();
+  // re-summarize from the edited transcript: the notice goes away once the new summary is in
+  await page.getByTestId("btn-resummarize").click();
+  await expect(page.getByTestId("summary-waiting")).toBeVisible();
+  await expect(summary).toBeVisible({ timeout: 10 * 60_000 });
+  await expect(page.getByTestId("summary-stale")).toHaveCount(0);
 
   // ---- back to the library: row is done and offers download
   await page.getByRole("link", { name: "งานถอดเสียงทั้งหมด" }).click();

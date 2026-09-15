@@ -157,6 +157,7 @@ pub async fn detail(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
     let (has_changes,): (bool,) = sqlx::query_as("SELECT changes_text IS NOT NULL FROM jobs WHERE id = $1").bind(id).fetch_one(&st.db).await?;
     Ok(Json(JobDetail {
         job: job.view(segments.len() as i64),
+        summary_stale: jobs::summary_stale(&job, &segments),
         segments,
         has_changes,
         transcript_meta: job.transcript_meta.clone(),
@@ -237,14 +238,71 @@ pub async fn rename_speaker(
         .ok_or(AppError::NotFound)?;
     let mut speakers = job.speakers.0;
     let sp = speakers.get_mut(idx).ok_or(AppError::NotFound)?;
-    sp.name = name;
+    let old = std::mem::replace(&mut sp.name, name.clone());
+    // The name usually comes from the transcript itself (someone addressed by name), so the text follows the rename.
+    // The placeholder label ("ผู้พูด 2") is not something anyone said, in either direction.
+    let mut changed = Vec::new();
+    let mut replaced = 0;
+    if old != name && old != sp.label && name != sp.label {
+        let rows: Vec<(i32, String)> = sqlx::query_as("SELECT idx, text FROM segments WHERE job_id = $1 AND strpos(text, $2) > 0 ORDER BY idx")
+            .bind(id)
+            .bind(&old)
+            .fetch_all(&mut *tx)
+            .await?;
+        for (i, text) in rows {
+            replaced += text.matches(old.as_str()).count();
+            let text = text.replace(old.as_str(), &name);
+            sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2").bind(id).bind(i).bind(&text).execute(&mut *tx).await?;
+            changed.push(json!({ "idx": i, "text": text }));
+        }
+    }
     sqlx::query("UPDATE jobs SET speakers = $2, updated_at = now() WHERE id = $1")
         .bind(id)
         .bind(sqlx::types::Json(&speakers))
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    Ok(Json(json!({ "speakers": speakers })))
+    let stale = stale_now(&st, id, u.id).await?;
+    Ok(Json(json!({ "speakers": speakers, "replaced": replaced, "changed": changed, "summary_stale": stale })))
+}
+
+#[derive(Deserialize)]
+pub struct EditSegmentReq {
+    text: String,
+}
+
+/// Saves a user's correction of one transcript line. Line breaks become spaces: every line of the summary input is
+/// "[MM:SS] ผู้พูด N: text".
+pub async fn edit_segment(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path((id, idx)): Path<(Uuid, i32)>,
+    Json(req): Json<EditSegmentReq>,
+) -> AppResult<Json<Value>> {
+    let text = req.text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.is_empty() {
+        return Err(AppError::BadRequest("ข้อความต้องไม่ว่าง".into()));
+    }
+    if text.chars().count() > jobs::MAX_SEGMENT_CHARS {
+        return Err(AppError::BadRequest(format!("ข้อความยาวได้ไม่เกิน {} ตัวอักษร", jobs::MAX_SEGMENT_CHARS)));
+    }
+    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+    if job.stage < jobs::STAGE_SUMMARY {
+        return Err(AppError::Conflict("แก้ข้อความได้เมื่อถอดเสียงเสร็จแล้ว".into()));
+    }
+    let r = sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2").bind(id).bind(idx).bind(&text).execute(&st.db).await?;
+    if r.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    sqlx::query("UPDATE jobs SET updated_at = now() WHERE id = $1").bind(id).execute(&st.db).await?;
+    let stale = stale_now(&st, id, u.id).await?;
+    Ok(Json(json!({ "text": text, "summary_stale": stale })))
+}
+
+async fn stale_now(st: &AppState, id: Uuid, user_id: Uuid) -> AppResult<bool> {
+    let job = jobs::get_owned(&st.db, id, user_id).await?.ok_or(AppError::NotFound)?;
+    let segments = jobs::segments(&st.db, id).await?;
+    Ok(jobs::summary_stale(&job, &segments))
 }
 
 /// Streams an object from storage with HTTP range support, so the browser can seek in a 2 GB video without

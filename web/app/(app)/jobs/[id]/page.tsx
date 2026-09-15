@@ -36,6 +36,14 @@ function changesLabel(j: JobDetail) {
   return c.names_to_confirm > 0 ? `ตรวจแก้ ${fixed} จุด · ชื่อรอยืนยัน ${c.names_to_confirm}` : `ตรวจแก้ ${fixed} จุด`;
 }
 
+interface RenameResult {
+  speakers: JobDetail["speakers"];
+  /** Occurrences of the old name replaced in the transcript text. */
+  replaced: number;
+  changed: { idx: number; text: string }[];
+  summary_stale: boolean;
+}
+
 const needsPolling = (j: JobDetail) =>
   j.status === "processing" || j.status === "uploading" || j.summary_status === "pending" || j.summary_status === "running";
 
@@ -143,12 +151,18 @@ function JobView({
   const [follow, setFollow] = useState(true);
   const [q, setQ] = useState(() => linkParams.get("q") ?? "");
   const [renaming, setRenaming] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
   const [flash, setFlash] = useState<{ d: number; k: number } | null>(null);
   const [dlOpen, setDlOpen] = useState<HTMLElement | null>(null);
   const [txIn, setTxIn] = useState(false);
   const segCount = useRef(segs.length);
 
   const D = dur || job.duration_sec || 1;
+  // Latest job for handlers that run later (toast undo, memoized transcript lines).
+  const jobRef = useRef(job);
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
   const curRef = useRef(cur);
   const segsRef = useRef(segs);
   useEffect(() => {
@@ -285,12 +299,12 @@ function JobView({
 
   // Keep the active line in view.
   useEffect(() => {
-    if (cur < 0 || !follow || performance.now() < userScrollUntil.current) return;
+    if (cur < 0 || !follow || editing !== null || performance.now() < userScrollUntil.current) return;
     const tx = txRef.current;
     const el = tx?.querySelector<HTMLElement>(`.seg[data-i="${cur}"]`);
     if (!tx || !el) return;
     tx.scrollTo({ top: Math.max(0, el.offsetTop - tx.clientHeight * 0.3), behavior: RM() ? "auto" : "smooth" });
-  }, [cur, follow]);
+  }, [cur, follow, editing]);
 
   // Stable handler so transcript lines (memoized) don't all re-render on every tick.
   const seekLineRef = useRef<(i: number) => void>(() => {});
@@ -312,22 +326,74 @@ function JobView({
     return segs.reduce((n, g) => n + splitMatches(g.text, needle).filter((p) => p.hit).length, 0);
   }, [q, segs]);
 
-  const saveName = async (i: number, value: string) => {
+  const saveName = async (i: number, value: string, undo = false) => {
     setRenaming(null);
-    const old = job.speakers[i].name;
+    const old = jobRef.current.speakers[i]?.name;
     const name = value.trim();
-    if (!name || name === old) return;
+    if (old === undefined || !name || name === old) return;
     setJob((j) => (j ? { ...j, speakers: j.speakers.map((sp, k) => (k === i ? { ...sp, name } : sp)) } : j));
     try {
-      const r = await api<{ speakers: JobDetail["speakers"] }>(`/api/jobs/${job.id}/speakers/${i}`, { method: "PATCH", body: { name } });
+      const r = await api<RenameResult>(`/api/jobs/${job.id}/speakers/${i}`, { method: "PATCH", body: { name } });
+      const texts = new Map(r.changed.map((c) => [c.idx, c.text]));
+      setJob((j) =>
+        j ? { ...j, speakers: r.speakers, summary_stale: r.summary_stale, segments: texts.size ? j.segments.map((g, k) => (texts.has(k) ? { ...g, text: texts.get(k)! } : g)) : j.segments } : j,
+      );
       patchJob({ id: job.id, speakers: r.speakers });
-      toast(`เปลี่ยน “${old}” เป็น “${name}” ทั้งทรานสคริปต์แล้ว`, { icon: "pencil" });
+      // The name is replaced wherever it appears in the text too; Thai has no word boundaries, so "คุณเบน" also
+      // matches inside "คุณเบนซ์". Offer an undo whenever the text changed.
+      toast(`เปลี่ยน “${old}” เป็น “${name}”${r.replaced ? ` · แก้ในข้อความ ${r.replaced} จุด` : ""}`, {
+        icon: "pencil",
+        action: r.replaced && !undo ? { label: "เลิกทำ", run: () => saveName(i, old, true) } : undefined,
+      });
     } catch (e) {
       setJob((j) => (j ? { ...j, speakers: j.speakers.map((sp, k) => (k === i ? { ...sp, name: old } : sp)) } : j));
       toast((e as Error).message, { kind: "err" });
     }
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-rename="${i}"]`)?.focus());
   };
+
+  const canEdit = job.stage >= 2 && hasTranscript;
+  const saveText = async (i: number, value: string) => {
+    const old = jobRef.current.segments[i]?.text;
+    const text = value.replace(/\s+/g, " ").trim();
+    if (old === undefined) return;
+    if (!text) {
+      toast("ข้อความต้องไม่ว่าง ถ้าไม่ต้องการแก้ให้กดยกเลิก", { kind: "err" });
+      return;
+    }
+    setEditing(null);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-edit="${i}"]`)?.focus());
+    if (text === old) return;
+    const put = (t: string) => setJob((j) => (j ? { ...j, segments: j.segments.map((g, k) => (k === i ? { ...g, text: t } : g)) } : j));
+    put(text);
+    try {
+      const r = await api<{ text: string; summary_stale: boolean }>(`/api/jobs/${job.id}/segments/${i}`, { method: "PATCH", body: { text } });
+      put(r.text);
+      setJob((j) => (j ? { ...j, summary_stale: r.summary_stale } : j));
+      toast(r.summary_stale ? "บันทึกข้อความแล้ว · กด “สรุปใหม่” เพื่อสรุปจากข้อความล่าสุด" : "บันทึกข้อความแล้ว", { icon: "pencil" });
+    } catch (e) {
+      put(old);
+      toast((e as Error).message, { kind: "err" });
+    }
+  };
+  const editRef = useRef({ edit: (i: number) => setEditing(i), save: saveText, cancel: () => {} });
+  useEffect(() => {
+    editRef.current = {
+      edit: (i) => {
+        videoRef.current?.pause();
+        setEditing(i);
+      },
+      save: saveText,
+      cancel: () => {
+        const i = editing;
+        setEditing(null);
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-edit="${i}"]`)?.focus());
+      },
+    };
+  });
+  const onEditLine = useCallback((i: number) => editRef.current.edit(i), []);
+  const onSaveLine = useCallback((i: number, text: string) => editRef.current.save(i, text), []);
+  const onCancelLine = useCallback(() => editRef.current.cancel(), []);
 
   const mediaSrc = mode === "audio" ? `/api/jobs/${job.id}/audio` : `/api/jobs/${job.id}/media`;
   const audioOnly = mode === "audio" || job.has_video === false;
@@ -807,7 +873,7 @@ function JobView({
                     <div className="sec-title">
                       <h2 id="tx-h">ทรานสคริปต์</h2>
                       <span className="sec-note">
-                        {segs.length} ช่วง · ผู้พูด {job.speakers.length} คน
+                        {segs.length} ช่วง · ผู้พูด {job.speakers.length} คน{canEdit ? " · กดดินสอท้ายบรรทัดเพื่อแก้ข้อความ" : ""}
                         {job.has_changes && (
                           <>
                             {" · "}
@@ -869,6 +935,11 @@ function JobView({
                         at={i === cur ? word : -1}
                         q={q.trim()}
                         onSeek={onSeekLine}
+                        canEdit={canEdit}
+                        editing={editing === i}
+                        onEdit={onEditLine}
+                        onSave={onSaveLine}
+                        onCancel={onCancelLine}
                       />
                     ))}
                   </ol>
@@ -927,6 +998,11 @@ const SegLine = memo(function SegLine({
   at,
   q,
   onSeek,
+  canEdit,
+  editing,
+  onEdit,
+  onSave,
+  onCancel,
 }: {
   i: number;
   g: Segment;
@@ -938,11 +1014,70 @@ const SegLine = memo(function SegLine({
   at: number;
   q: string;
   onSeek: (i: number) => void;
+  canEdit: boolean;
+  editing: boolean;
+  onEdit: (i: number) => void;
+  onSave: (i: number, text: string) => void;
+  onCancel: () => void;
 }) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Keep the Save / Cancel buttons in view when a line near the bottom of the box opens for editing.
+  useEffect(() => {
+    if (editing) inputRef.current?.closest("li")?.scrollIntoView({ block: "nearest", behavior: RM() ? "auto" : "smooth" });
+  }, [editing]);
   const parts = q ? splitMatches(g.text, q) : null;
   const hit = !!parts && parts.some((p) => p.hit);
+  if (editing) {
+    return (
+      <li>
+        <div className={`seg seg-editing c${ci(g.speaker)}`} data-i={i}>
+          <span className="seg-time">{tc(g.start)}</span>
+          <span className="seg-body">
+            <span className="seg-who">
+              <i className="dot" />
+              <span>{name}</span>
+            </span>
+            <label className="sr-only" htmlFor={`seg-edit-${i}`}>
+              แก้ข้อความช่วง {tc(g.start)} ของ {name}
+            </label>
+            <textarea
+              ref={inputRef}
+              id={`seg-edit-${i}`}
+              className="seg-input"
+              defaultValue={g.text}
+              maxLength={2000}
+              rows={2}
+              autoFocus
+              data-testid="seg-input"
+              onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  onSave(i, e.currentTarget.value);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancel();
+                }
+              }}
+            />
+            <span className="seg-edit-bar">
+              <span className="seg-edit-hint">
+                <span className="kbd">Enter</span> บันทึก · <span className="kbd">Esc</span> ยกเลิก
+              </span>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={onCancel}>
+                ยกเลิก
+              </button>
+              <button className="btn btn-primary btn-sm" type="button" data-testid="seg-save" onClick={() => onSave(i, inputRef.current?.value ?? g.text)}>
+                บันทึก
+              </button>
+            </span>
+          </span>
+        </div>
+      </li>
+    );
+  }
   return (
-    <li style={i < 14 ? { ["--seg-delay" as string]: `${i * 35}ms` } : undefined}>
+    <li className={canEdit ? "can-edit" : undefined} style={i < 14 ? { ["--seg-delay" as string]: `${i * 35}ms` } : undefined}>
       <button className={`seg c${ci(g.speaker)}${cont ? " cont" : ""}${on ? " on" : ""}${hit ? " hit" : ""}`} type="button" data-i={i} aria-current={on || undefined} onClick={() => onSeek(i)}>
         <span className="seg-time">{tc(g.start)}</span>
         <span className="seg-body">
@@ -966,6 +1101,11 @@ const SegLine = memo(function SegLine({
         </span>
         <span className="seg-prog" aria-hidden="true" />
       </button>
+      {canEdit && (
+        <button className="icon-btn seg-edit" type="button" data-edit={i} aria-label={`แก้ข้อความช่วง ${tc(g.start)}`} title="แก้ข้อความ" onClick={() => onEdit(i)}>
+          <Icon name="pencil" />
+        </button>
+      )}
     </li>
   );
 });

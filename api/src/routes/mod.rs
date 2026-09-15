@@ -27,6 +27,7 @@ pub fn router(st: AppState) -> Router {
         .route("/api/jobs/{id}/summary.txt", get(jobs::summary_txt))
         .route("/api/jobs/{id}/changes.txt", get(jobs::changes_txt))
         .route("/api/jobs/{id}/speakers/{idx}", patch(jobs::rename_speaker))
+        .route("/api/jobs/{id}/segments/{idx}", patch(jobs::edit_segment))
         .route("/api/jobs/{id}/media", get(jobs::media))
         .route("/api/jobs/{id}/audio", get(jobs::audio))
         .route("/api/jobs/{id}/thumbnail", get(jobs::thumbnail))

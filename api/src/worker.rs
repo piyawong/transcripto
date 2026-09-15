@@ -16,7 +16,7 @@ use crate::AppState;
 use crate::jobs::{self, Job, SpeakerView};
 use crate::pipeline::{self, Ai};
 use crate::storage;
-use crate::{media, transcript};
+use crate::media;
 
 /// A lock older than 90 s (18 missed heartbeats) is considered abandoned; see `claim`.
 const HEARTBEAT: Duration = Duration::from_secs(5);
@@ -403,13 +403,10 @@ async fn summary_step(st: &AppState, ai: &Ai, worker: &str, job: &Job, beat: &Ar
         .execute(&st.db)
         .await?;
     let segs = jobs::segments(&st.db, job.id).await?;
-    let segments: Vec<transcript::Segment> = segs
-        .iter()
-        .map(|s| transcript::Segment { start: s.start_sec, end: s.end_sec, speaker: s.speaker as usize, text: s.text.clone() })
-        .collect();
-    let speakers: Vec<transcript::Speaker> =
-        job.speakers.0.iter().map(|s| transcript::Speaker { label: s.label.clone(), name: s.name.clone(), role: s.role.clone() }).collect();
-    let text = transcript::transcript_for_summary(&segments, &speakers);
+    // Speakers as they are now: a rename after this job was claimed is part of what gets summarized.
+    let (speakers,): (sqlx::types::Json<Vec<jobs::SpeakerView>>,) =
+        sqlx::query_as("SELECT speakers FROM jobs WHERE id = $1").bind(job.id).fetch_one(&st.db).await?;
+    let text = jobs::summary_input(&segs, &speakers.0);
 
     let out = pipeline::summarize(ai, &text, &job.name).await.context("summary")?;
     if !out.checks.is_clean() {
@@ -424,7 +421,11 @@ async fn summary_step(st: &AppState, ai: &Ai, worker: &str, job: &Job, beat: &Ar
     .bind(job.id)
     .bind(serde_json::to_value(&out.minutes)?)
     .bind(&out.text)
-    .bind(json!(out.meta))
+    .bind({
+        let mut meta = out.meta.clone();
+        meta["transcript_hash"] = json!(jobs::text_hash(&text));
+        meta
+    })
     .bind(worker)
     .execute(&st.db)
     .await?;

@@ -78,6 +78,8 @@ export interface JobDetail extends Job {
   summary: Minutes | null;
   summary_text: string | null;
   summary_meta: SummaryMeta | null;
+  /** The transcript was edited or a speaker renamed after the summary was made. */
+  summary_stale: boolean;
 }
 
 export interface User {
