@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AuthStage, useShake } from "@/components/AuthStage";
 import { Icon } from "@/components/Icon";
+import { PoweredBy } from "@/components/PoweredBy";
 import { useToast } from "@/components/Toasts";
 import { api } from "@/lib/api";
 
@@ -168,6 +169,7 @@ function Login() {
             </button>
           </form>
         </div>
+        <PoweredBy />
       </div>
     </section>
   );

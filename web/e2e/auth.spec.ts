@@ -30,7 +30,14 @@ test("login validates input, rejects a wrong password, then signs in and out", a
   await page.getByRole("button", { name: "แสดงรหัสผ่าน" }).click();
   await expect(page.locator("#password")).toHaveAttribute("type", "text");
 
+  // "Powered by Pichvara" links to pichvara.com in a new tab, on the sign-in page and inside the app
+  const credit = page.getByTestId("powered-by");
+  await expect(credit).toHaveAttribute("href", "https://pichvara.com");
+  await expect(credit).toHaveAttribute("target", "_blank");
+  await expect(credit.getByRole("img", { name: "Pichvara" })).toBeVisible();
+
   await login(page);
+  await expect(page.getByTestId("powered-by")).toHaveAttribute("href", "https://pichvara.com");
   await expect(page.getByText(/โควตา/)).toHaveCount(0);
   await page.getByRole("button", { name: /บัญชีของ/ }).click();
   await expect(page.getByRole("menuitem")).toHaveText(["ตั้งค่า", "ออกจากระบบ"]);

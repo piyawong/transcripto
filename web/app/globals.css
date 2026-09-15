@@ -28,6 +28,14 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 .sum-head { padding: 14px 16px 12px 20px; border-bottom: 1px solid var(--line); }
 .view-enter .side-col { animation: slideInR .55s var(--ease-out) .1s both; }
 
+/* "Powered by Pichvara" credit: app footer and under the sign-in form */
+.site-foot { display: flex; justify-content: center; padding-inline: 16px; padding-block: 0 24px; }
+.powered { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 12.5px; color: var(--ink-3); text-decoration: none; transition: color .15s, background-color .15s; }
+.powered:hover { color: var(--ink-2); background: var(--sunken); }
+.powered:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.powered img { display: block; width: auto; height: 24px; }
+.login-pane { flex-direction: column; gap: 28px; }
+
 /* transcript: edit a line (pencil beside the seek button; the line becomes a text box) */
 .tx-head .sec-title { flex-wrap: wrap; row-gap: 2px; }
 .tx-head .sec-title h2 { white-space: nowrap; }
