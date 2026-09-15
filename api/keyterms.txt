@@ -1,0 +1,19 @@
+# Keyterms for ElevenLabs Scribe v2 (one per line, max 50 chars, max 1000 terms).
+# Proper nouns and meeting jargon only; common words are left to the context corrector.
+# No person names: they are added only after a person reviews the attendee list (a wrong name makes the corrector rename people).
+ประธานอาวุโส
+CP ALL
+เจิ้งต้า
+Lotus
+Makro
+Happy Mall
+LDP
+B2B
+B2C
+O2O
+Supplier
+ฉางซา
+หูหนาน
+กวางตุ้ง
+ซานหยวนหลี่
+พั่งตงไหล

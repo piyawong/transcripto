@@ -1,0 +1,30 @@
+# secrets
+.env
+.env.*
+!.env.example
+keys.md
+
+# runtime data
+data/
+.run/
+/samples/
+
+# build
+api/target/
+web/node_modules/
+web/.next/
+web/e2e-results/
+web/e2e-report/
+.DS_Store
+bench/__pycache__/
+sample_9effaf49/
+
+# real meeting content: kept local, never pushed (the repository is public)
+docs/rust-implementation/fixtures/
+docs/transcription-solution.md
+docs/gemini-3.1-pro-transcription.md
+docs/plan-clarification-questions.md
+bench/results/
+prototype/
+scripts/pull_samples.sh
+web/tsconfig.tsbuildinfo

@@ -1,0 +1,77 @@
+# Dev:   docker compose -p transcripto up -d db minio   (then run api + web locally, see README)
+# Full:  docker compose -p transcripto --profile app up -d --build
+# Production: set MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / POSTGRES_PASSWORD / ADMIN_PASSWORD in .env (see README "Deploy").
+# Postgres and MinIO are bound to localhost only; WEB_PORT=127.0.0.1:<port> keeps the web app behind a reverse proxy.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: transcripto
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-transcripto}
+      POSTGRES_DB: transcripto
+    ports:
+      - "${DB_PORT:-127.0.0.1:5440}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transcripto"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Uploaded videos, extracted audio, thumbnails and speech-to-text responses (bucket transcripto-media).
+  minio:
+    # MinIO no longer publishes images to Docker Hub; this is the last community release on quay.io.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-transcripto}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-transcripto-dev-secret}
+    ports:
+      - "127.0.0.1:9010:9000"   # S3 API
+      - "127.0.0.1:9011:9001"   # web console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    profiles: ["app"]
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://transcripto:${POSTGRES_PASSWORD:-transcripto}@db:5432/transcripto
+      # Required; the API exits at startup with a clear message when either is missing. (Not "${VAR:?}": compose
+      # checks that for every service, which would also block `up -d db minio` in development.)
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-transcripto}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-transcripto-dev-secret}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    restart: unless-stopped
+
+  web:
+    profiles: ["app"]
+    build:
+      context: ./web
+      args:
+        API_URL: http://api:8010
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3010}:3010"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  miniodata:

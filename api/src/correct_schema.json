@@ -1,0 +1,130 @@
+{
+  "properties": {
+    "edits": {
+      "items": {
+        "properties": {
+          "timestamp": {
+            "description": "MM:SS of the transcript line",
+            "title": "Timestamp",
+            "type": "STRING"
+          },
+          "original": {
+            "description": "Exact text copied from that line, as short as possible",
+            "title": "Original",
+            "type": "STRING"
+          },
+          "replacement": {
+            "title": "Replacement",
+            "type": "STRING"
+          },
+          "kind": {
+            "enum": [
+              "correction",
+              "number",
+              "name"
+            ],
+            "title": "EditKind",
+            "type": "STRING"
+          },
+          "reason": {
+            "description": "Short reason in Thai",
+            "title": "Reason",
+            "type": "STRING"
+          }
+        },
+        "property_ordering": [
+          "timestamp",
+          "original",
+          "replacement",
+          "kind",
+          "reason"
+        ],
+        "required": [
+          "timestamp",
+          "original",
+          "replacement",
+          "kind",
+          "reason"
+        ],
+        "title": "Edit",
+        "type": "OBJECT"
+      },
+      "title": "Edits",
+      "type": "ARRAY"
+    },
+    "unclear": {
+      "items": {
+        "properties": {
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "STRING"
+          },
+          "text": {
+            "description": "The garbled span, copied from the line",
+            "title": "Text",
+            "type": "STRING"
+          },
+          "reason": {
+            "description": "Short reason in Thai",
+            "title": "Reason",
+            "type": "STRING"
+          }
+        },
+        "property_ordering": [
+          "timestamp",
+          "text",
+          "reason"
+        ],
+        "required": [
+          "timestamp",
+          "text",
+          "reason"
+        ],
+        "title": "Unclear",
+        "type": "OBJECT"
+      },
+      "title": "Unclear",
+      "type": "ARRAY"
+    },
+    "speakers": {
+      "items": {
+        "properties": {
+          "label": {
+            "description": "Speaker label as in the transcript, e.g. ผู้พูด 3",
+            "title": "Label",
+            "type": "STRING"
+          },
+          "role": {
+            "description": "Role or name if stated or clearly implied, otherwise ไม่ทราบ",
+            "title": "Role",
+            "type": "STRING"
+          }
+        },
+        "property_ordering": [
+          "label",
+          "role"
+        ],
+        "required": [
+          "label",
+          "role"
+        ],
+        "title": "Speaker",
+        "type": "OBJECT"
+      },
+      "title": "Speakers",
+      "type": "ARRAY"
+    }
+  },
+  "property_ordering": [
+    "edits",
+    "unclear",
+    "speakers"
+  ],
+  "required": [
+    "edits",
+    "unclear",
+    "speakers"
+  ],
+  "title": "Corrections",
+  "type": "OBJECT"
+}

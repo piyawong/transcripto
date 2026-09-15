@@ -1,0 +1,242 @@
+{
+ "properties": {
+  "title": {
+   "title": "Title",
+   "type": "STRING"
+  },
+  "participants": {
+   "items": {
+    "properties": {
+     "speaker": {
+      "description": "Speaker label as in the transcript, e.g. ผู้พูด 1",
+      "title": "Speaker",
+      "type": "STRING"
+     },
+     "role": {
+      "description": "Role or name if stated in the meeting, otherwise ไม่ทราบ",
+      "title": "Role",
+      "type": "STRING"
+     }
+    },
+    "property_ordering": [
+     "speaker",
+     "role"
+    ],
+    "required": [
+     "speaker",
+     "role"
+    ],
+    "title": "Participant",
+    "type": "OBJECT"
+   },
+   "title": "Participants",
+   "type": "ARRAY"
+  },
+  "overview": {
+   "description": "2-3 sentences: what the meeting covered and the main outcomes",
+   "title": "Overview",
+   "type": "STRING"
+  },
+  "segments": {
+   "items": {
+    "properties": {
+     "kind": {
+      "enum": [
+       "report",
+       "advice",
+       "discussion"
+      ],
+      "title": "SegmentKind",
+      "type": "STRING"
+     },
+     "speaker": {
+      "description": "Who reports or advises, by role or name; for discussion, the participants, e.g. ประธานอาวุโส / คุณเบน",
+      "title": "Speaker",
+      "type": "STRING"
+     },
+     "subject": {
+      "description": "Short Thai noun phrase for what it is about, without a leading 'เรื่อง'",
+      "title": "Subject",
+      "type": "STRING"
+     },
+     "responds_to": {
+      "description": "For advice or discussion: subject of the report it responds to, if any",
+      "nullable": true,
+      "title": "Responds To",
+      "type": "STRING"
+     },
+     "start": {
+      "description": "MM:SS",
+      "title": "Start",
+      "type": "STRING"
+     },
+     "end": {
+      "description": "MM:SS",
+      "title": "End",
+      "type": "STRING"
+     },
+     "details": {
+      "items": {
+       "type": "STRING"
+      },
+      "title": "Details",
+      "type": "ARRAY"
+     },
+     "quotes": {
+      "items": {
+       "properties": {
+        "text": {
+         "description": "Short phrase copied verbatim from the transcript",
+         "title": "Text",
+         "type": "STRING"
+        },
+        "timestamp": {
+         "description": "MM:SS start time of the transcript line containing the phrase",
+         "title": "Timestamp",
+         "type": "STRING"
+        }
+       },
+       "property_ordering": [
+        "text",
+        "timestamp"
+       ],
+       "required": [
+        "text",
+        "timestamp"
+       ],
+       "title": "Quote",
+       "type": "OBJECT"
+      },
+      "title": "Quotes",
+      "type": "ARRAY"
+     }
+    },
+    "property_ordering": [
+     "kind",
+     "speaker",
+     "subject",
+     "responds_to",
+     "start",
+     "end",
+     "details",
+     "quotes"
+    ],
+    "required": [
+     "kind",
+     "speaker",
+     "subject",
+     "responds_to",
+     "start",
+     "end",
+     "details",
+     "quotes"
+    ],
+    "title": "Segment",
+    "type": "OBJECT"
+   },
+   "title": "Segments",
+   "type": "ARRAY"
+  },
+  "action_items": {
+   "items": {
+    "properties": {
+     "task": {
+      "title": "Task",
+      "type": "STRING"
+     },
+     "requested_by": {
+      "description": "Who gave the directive or request",
+      "nullable": true,
+      "title": "Requested By",
+      "type": "STRING"
+     },
+     "owner": {
+      "description": "Responsible person, only if explicitly stated; otherwise null",
+      "nullable": true,
+      "title": "Owner",
+      "type": "STRING"
+     },
+     "due": {
+      "description": "Deadline, only if explicitly stated; otherwise null",
+      "nullable": true,
+      "title": "Due",
+      "type": "STRING"
+     },
+     "timestamps": {
+      "items": {
+       "type": "STRING"
+      },
+      "title": "Timestamps",
+      "type": "ARRAY"
+     }
+    },
+    "property_ordering": [
+     "task",
+     "requested_by",
+     "owner",
+     "due",
+     "timestamps"
+    ],
+    "required": [
+     "task",
+     "requested_by",
+     "owner",
+     "due",
+     "timestamps"
+    ],
+    "title": "ActionItem",
+    "type": "OBJECT"
+   },
+   "title": "Action Items",
+   "type": "ARRAY"
+  },
+  "needs_confirmation": {
+   "items": {
+    "properties": {
+     "text": {
+      "description": "What looks mis-transcribed or ambiguous, and why",
+      "title": "Text",
+      "type": "STRING"
+     },
+     "timestamps": {
+      "items": {
+       "type": "STRING"
+      },
+      "title": "Timestamps",
+      "type": "ARRAY"
+     }
+    },
+    "property_ordering": [
+     "text",
+     "timestamps"
+    ],
+    "required": [
+     "text",
+     "timestamps"
+    ],
+    "title": "Check",
+    "type": "OBJECT"
+   },
+   "title": "Needs Confirmation",
+   "type": "ARRAY"
+  }
+ },
+ "property_ordering": [
+  "title",
+  "participants",
+  "overview",
+  "segments",
+  "action_items",
+  "needs_confirmation"
+ ],
+ "required": [
+  "title",
+  "participants",
+  "overview",
+  "segments",
+  "action_items",
+  "needs_confirmation"
+ ],
+ "title": "MeetingMinutes",
+ "type": "OBJECT"
+}
