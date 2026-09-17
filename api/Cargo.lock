@@ -3290,6 +3290,7 @@ dependencies = [
  "cookie",
  "dotenvy",
  "futures",
+ "libc",
  "regex",
  "reqwest",
  "serde",

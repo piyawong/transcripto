@@ -30,6 +30,15 @@ pub struct Line {
     /// "ผู้พูด N", numbered in order of first appearance; None when the response has no speakers.
     pub speaker: Option<String>,
     pub text: String,
+    /// Original ElevenLabs pieces and their absolute media times. The UI groups these into readable Thai words.
+    pub tokens: Vec<TimedToken>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TimedToken {
+    pub text: String,
+    pub start: f64,
+    pub end: f64,
 }
 
 impl Line {
@@ -60,8 +69,15 @@ pub fn words_to_lines(words: &[Word], soft: f64, hard: f64, max: f64) -> Vec<Lin
         start: f64,
         speaker: Option<String>,
         text: String,
+        tokens: Vec<TimedToken>,
     }
-    let finish = |c: Current, end: f64| Line { start: c.start, end: end.max(c.start), speaker: c.speaker, text: c.text.trim().to_string() };
+    let finish = |c: Current, end: f64| Line {
+        start: c.start,
+        end: end.max(c.start),
+        speaker: c.speaker,
+        text: c.text.trim().to_string(),
+        tokens: c.tokens,
+    };
 
     let mut labels: HashMap<String, String> = HashMap::new();
     let mut lines = Vec::new();
@@ -74,6 +90,7 @@ pub fn words_to_lines(words: &[Word], soft: f64, hard: f64, max: f64) -> Vec<Lin
         if w.kind.as_deref() == Some("spacing") {
             if let Some(c) = current.as_mut() {
                 c.text.push_str(&w.text);
+                c.tokens.push(TimedToken { text: w.text.clone(), start, end: or_else(w.end, start) });
             }
             after_spacing = true;
             continue;
@@ -93,15 +110,18 @@ pub fn words_to_lines(words: &[Word], soft: f64, hard: f64, max: f64) -> Vec<Lin
             if let Some(c) = current.take() {
                 lines.push(finish(c, prev_end));
             }
-            current = Some(Current { start, speaker, text: String::new() });
+            current = Some(Current { start, speaker, text: String::new(), tokens: Vec::new() });
         }
         let c = current.as_mut().expect("current line");
         // Thai words join without spaces, but adjacent English words or numbers need one.
         if c.text.chars().next_back().is_some_and(|x| x.is_ascii_alphanumeric()) && w.text.chars().next().is_some_and(|x| x.is_ascii_alphanumeric()) {
             c.text.push(' ');
+            c.tokens.push(TimedToken { text: " ".into(), start: prev_end, end: start });
         }
         c.text.push_str(&w.text);
-        prev_end = or_else(w.end, start);
+        let end = or_else(w.end, start);
+        c.tokens.push(TimedToken { text: w.text.clone(), start, end });
+        prev_end = end;
         after_spacing = false;
     }
     if let Some(c) = current {
@@ -139,6 +159,7 @@ mod tests {
         assert_eq!(lines.len(), 73);
         assert!(lines.windows(2).all(|p| p[0].start <= p[1].start));
         assert!(lines.iter().all(|l| l.end >= l.start));
+        assert!(lines.iter().all(|l| l.tokens.iter().map(|t| t.text.as_str()).collect::<String>().trim() == l.text));
     }
 
     #[test]

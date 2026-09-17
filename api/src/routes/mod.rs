@@ -13,21 +13,42 @@ use crate::AppState;
 pub fn router(st: AppState) -> Router {
     let upload_limit = st.cfg.max_upload_bytes as usize + 1024 * 1024;
     Router::new()
-        .route("/api/health", get(|| async { axum::Json(json!({ "ok": true })) }))
+        .route(
+            "/api/health",
+            get(|| async { axum::Json(json!({ "ok": true })) }),
+        )
         .route("/api/auth/me", get(auth::me))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/logout", post(auth::logout))
-        .route("/api/settings/keyterms", get(settings::get_keyterms).put(settings::put_keyterms).delete(settings::reset_keyterms))
+        .route(
+            "/api/settings/keyterms",
+            get(settings::get_keyterms)
+                .put(settings::put_keyterms)
+                .delete(settings::reset_keyterms),
+        )
         .route("/api/jobs", get(jobs::list).post(jobs::create))
         .route("/api/jobs/search", get(jobs::search))
+        .route("/api/jobs/import", post(jobs::import))
         .route("/api/jobs/{id}", get(jobs::detail).delete(jobs::delete))
-        .route("/api/jobs/{id}/file", put(jobs::upload).layer(DefaultBodyLimit::max(upload_limit)))
+        .route(
+            "/api/jobs/{id}/transcript-timings",
+            get(jobs::transcript_timings),
+        )
+        .route(
+            "/api/jobs/{id}/file",
+            put(jobs::upload).layer(DefaultBodyLimit::max(upload_limit)),
+        )
         .route("/api/jobs/{id}/retry", post(jobs::retry))
+        .route("/api/jobs/{id}/retranscribe", post(jobs::retranscribe))
         .route("/api/jobs/{id}/summary/retry", post(jobs::retry_summary))
         .route("/api/jobs/{id}/summary.txt", get(jobs::summary_txt))
         .route("/api/jobs/{id}/changes.txt", get(jobs::changes_txt))
         .route("/api/jobs/{id}/speakers/{idx}", patch(jobs::rename_speaker))
         .route("/api/jobs/{id}/segments/{idx}", patch(jobs::edit_segment))
+        .route(
+            "/api/jobs/{id}/transcript/replace",
+            post(jobs::replace_transcript),
+        )
         .route("/api/jobs/{id}/media", get(jobs::media))
         .route("/api/jobs/{id}/audio", get(jobs::audio))
         .route("/api/jobs/{id}/thumbnail", get(jobs::thumbnail))

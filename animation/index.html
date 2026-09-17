@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcripto · เลือกแบบ animation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    body { background: var(--paper); }
+    main { max-width: 1100px; margin: 0 auto; padding: 56px 20px 72px; display: grid; gap: 28px; }
+    header { display: grid; gap: 10px; }
+    header h1 { font-family: var(--font-d); font-size: clamp(1.75rem, 1rem + 2.4vw, 2.6rem); line-height: 1.25; }
+    header p { color: var(--text-2); max-width: 62ch; }
+    .grid { display: grid; gap: 16px; }
+    @media (min-width: 860px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+    .card { display: grid; gap: 12px; align-content: start; padding: 22px; border-radius: 20px; background: #fff; border: 1px solid var(--line); text-decoration: none; color: inherit; transition: transform 200ms, box-shadow 200ms; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 24px 48px -24px rgb(10 30 110 / 0.35); }
+    .card:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+    .tag { justify-self: start; padding: 3px 10px; border-radius: 99px; background: var(--ice); color: var(--blue-6); font-family: var(--font-d); font-size: 0.8125rem; font-weight: 700; }
+    .card h2 { font-family: var(--font-d); font-size: 1.35rem; }
+    .card p { color: var(--text-2); font-size: 0.9375rem; }
+    .card ul { display: grid; gap: 6px; font-size: 0.875rem; color: var(--muted); }
+    .card li::before { content: "· "; color: var(--blue); font-weight: 700; }
+    .go { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 10px 18px; border-radius: 99px; background: var(--blue); color: #fff; font-weight: 600; }
+    .note { font-size: 0.875rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="tag">Prototype · ฉาก 03</p>
+      <h1>Transcripto — เลือกแบบ animation</h1>
+      <p>ทั้ง 3 แบบเล่าเรื่องเดียวกันด้วย scroll: อัปโหลดเสียง → แยกผู้พูด (พร้อมตั้งชื่อ) → ถอดเสียงพร้อมเวลาและไฮไลต์คำที่กำลังพูด → สรุปประชุมพร้อมดาวน์โหลด ใช้สีและฟอนต์ของเว็บจริง ลองเลื่อนดูทั้งบนจอใหญ่และมือถือได้เลย</p>
+    </header>
+    <div class="grid">
+      <a class="card" href="a-clay.html">
+        <span class="tag">A</span>
+        <h2>Clay Buddies</h2>
+        <p>ของเล่นดินน้ำมัน 3D นุ่มๆ — ผู้พูดเป็นตัวกลมๆ มีหน้า ขยับปากตอนพูด</p>
+        <ul><li>ไฟล์หล่นลงเครื่อง Transcripto</li><li>คลื่นเสียงแบ่งสีตามผู้พูด</li><li>ฟองคำพูดไฮไลต์ทีละคำ</li><li>สมุดสรุปพลิกเปิด ติ๊กทีละข้อ</li></ul>
+        <span class="go">ดูแบบ A →</span>
+      </a>
+      <a class="card" href="b-exploded.html">
+        <span class="tag">B</span>
+        <h2>Exploded App</h2>
+        <p>หน้าจอ Transcripto จริงแยกเป็นชั้น 3D แล้วหยิบทีละชั้นมาเล่า — ใกล้ของจริงที่สุด</p>
+        <ul><li>อัปโหลด → จอเอียงแตกเป็น 4 ชั้น</li><li>แถบเวลาผู้พูดเติมทีละช่วง</li><li>ซับไตเติลและทรานสคริปต์ตามคนพูด</li><li>ชั้นสรุปลอยขึ้นมาหน้าสุด</li></ul>
+        <span class="go">ดูแบบ B →</span>
+      </a>
+      <a class="card" href="c-orbit.html">
+        <span class="tag">C</span>
+        <h2>Voice Orbit</h2>
+        <p>วงคลื่นเสียง 3D ลูกแก้วผู้พูดโคจรรอบ การ์ดทรานสคริปต์หมุนเป็นวง แล้วพับรวมเป็นใบสรุป</p>
+        <ul><li>วงแท่งเสียงยืน 3D หายใจตามเสียง</li><li>วงแบ่งสีตามสัดส่วนเวลาพูด</li><li>carousel การ์ด + แถบเวลา</li><li>ใบสรุปคลี่ออกทีละพับ</li></ul>
+        <span class="go">ดูแบบ C →</span>
+      </a>
+    </div>
+    <p class="note">ข้อมูลในฉากเป็นตัวอย่าง (ไม่ใช่ประชุมจริงของลูกค้า) · เปิดโหมดลดการเคลื่อนไหวของระบบจะเห็นภาพสุดท้ายแบบนิ่ง</p>
+  </main>
+</body>
+</html>

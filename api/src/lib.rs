@@ -1,6 +1,8 @@
 pub mod auth;
+pub mod clarify;
 pub mod config;
 pub mod correct;
+pub mod download;
 pub mod elevenlabs;
 pub mod error;
 pub mod gemini;

@@ -1,0 +1,143 @@
+/* Login stage: the looping "how it works" scene (components/ProcessScene.tsx).
+   Ported from animation/a-clay.html + animation/buddies.css (Mochi only). Every class is prefixed ps-/bd- and scoped
+   under .ps because global stylesheets stay loaded after navigating away from /login. */
+
+.ps {
+  --ps-navy: #0a1133;
+  --ps-cyan: #22c3f3;
+  --ps-edge: #d5e3f4;
+  flex: 1 1 0;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ps ol, .ps ul { list-style: none; margin: 0; padding: 0; }
+.ps p, .ps h3 { margin: 0; }
+
+/* step chips + pause button */
+.ps-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ps-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+.ps-steps li { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 99px; background: #fff; border: 1px solid var(--line); font-size: 14px; font-weight: 500; line-height: 1.4; color: var(--ink-2); transition: background-color .24s, border-color .24s, color .24s; }
+.ps-steps b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-hover); font: 500 12px/1 var(--font-mono); transition: background-color .24s, color .24s; }
+.ps-steps li.is-on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ps-steps li.is-on b { background: #fff; color: var(--brand); }
+.ps-steps li.is-done b { background: var(--ok-soft); color: var(--ok); }
+.ps-toggle { flex: none; }
+.ps-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* the art keeps the prototype's 820:640 box and scales to whatever height the stage has left */
+.ps-frame { position: relative; flex: 1 1 0; min-height: 0; container-type: size; }
+.ps-art { position: relative; width: min(100cqw, 100cqh * 820 / 640); aspect-ratio: 820 / 640; margin-inline: auto; container-type: inline-size; isolation: isolate; font-family: var(--font-body); line-height: 1.6; color: var(--ps-navy); }
+.ps-art::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(28% 30% at 72% 30%, rgb(34 195 243 / .14), transparent), radial-gradient(40% 26% at 50% 74%, rgb(116 102 238 / .08), transparent); }
+.ps-art > * { position: absolute; }
+.ps:not([data-live]) .ps-art { visibility: hidden; }
+.ps-art svg.i { width: 1em; height: 1em; stroke-width: 2; }
+
+.ps-clay { background: #fff; border-radius: 3cqw; box-shadow: inset 0 -.7cqw 0 rgb(10 60 160 / .07), inset 0 .5cqw 0 rgb(255 255 255 / .95), 0 1.1cqw 0 var(--ps-edge), 0 3.2cqw 5cqw -1.2cqw rgb(11 50 140 / .3); }
+.ps-blob { width: 14cqw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #cfe6fb 60%, #b8d6f5); opacity: .7; animation: ps-bob 7s ease-in-out infinite alternate; }
+.ps-blob-2 { width: 8cqw; animation-duration: 9s; background: radial-gradient(circle at 35% 30%, #fff, #e3d8ff 60%, #cdbcff); }
+@keyframes ps-bob { to { transform: translateY(-2.4cqw) rotate(12deg); } }
+
+/* the Transcripto machine */
+.ps-machine { width: 30cqw; display: grid; justify-items: center; gap: 1.6cqw; padding: 2.4cqw 2cqw 2.2cqw; border-radius: 4cqw; background: linear-gradient(180deg, #1b2a78, var(--ps-navy)); color: #fff; box-shadow: inset 0 .6cqw 0 rgb(255 255 255 / .18), inset 0 -.9cqw 0 rgb(0 0 0 / .25), 0 1.4cqw 0 #060b24, 0 4cqw 6cqw -1.5cqw rgb(4 10 42 / .5); transform-origin: 0 0; z-index: 2; }
+.ps-slot { width: 16cqw; height: 1.6cqw; border-radius: 99px; background: #050a1e; box-shadow: inset 0 .4cqw .6cqw rgb(0 0 0 / .8); }
+.ps-brand { font-family: var(--font-display); font-weight: 700; font-size: max(11px, 1.9cqw); letter-spacing: -.01em; }
+.ps-brand span { color: var(--ps-cyan); }
+.ps-dome { position: relative; display: grid; place-items: center; width: 13cqw; aspect-ratio: 1; }
+.ps-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ps-ring circle { fill: none; stroke-width: 7; }
+.ps-ring .ps-track { stroke: rgb(255 255 255 / .12); }
+.ps-ring .ps-fill { stroke: var(--ps-cyan); stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.ps-mic { display: grid; place-items: center; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #7ab8ff, var(--brand) 55%, #0a4f9c); box-shadow: inset 0 -.6cqw 0 rgb(0 0 0 / .2), 0 .8cqw 1.6cqw rgb(0 0 0 / .35); }
+.ps-mic svg.i { width: 45%; height: 45%; color: #fff; }
+.ps-status { display: inline-flex; align-items: center; gap: .8cqw; padding: .5cqw 1.4cqw; border-radius: 99px; background: #d7f5e6; color: #0b6b40; font-size: max(10px, 1.45cqw); font-weight: 600; white-space: nowrap; }
+.ps-status svg.i { width: max(11px, 1.6cqw); height: max(11px, 1.6cqw); stroke-width: 3; }
+
+.ps-file { min-width: 24cqw; white-space: nowrap; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .6cqw 1.4cqw; padding: 1.6cqw; z-index: 3; }
+.ps-file-ic { grid-row: span 2; display: grid; place-items: center; width: 5.4cqw; aspect-ratio: 1; border-radius: 1.6cqw; background: radial-gradient(circle at 35% 30%, #7ab8ff, var(--brand)); color: #fff; box-shadow: inset 0 -.4cqw 0 rgb(0 0 0 / .18); }
+.ps-file-ic svg.i { width: 55%; height: 55%; }
+.ps-file b { font-family: var(--font-display); font-size: max(10px, 1.55cqw); font-weight: 600; line-height: 1.3; }
+.ps-file small { font-size: max(9px, 1.25cqw); line-height: 1.3; color: var(--ink-3); }
+
+.ps-wave { left: 6%; top: 36%; width: 88cqw; height: 11cqw; display: flex; align-items: center; gap: .55cqw; padding: 1.6cqw 2cqw; border-radius: 99px; transform-origin: left center; z-index: 1; }
+.ps-wave i { flex: 1; height: calc(var(--h) * 100%); border-radius: 99px; background: #c5d2e6; }
+.ps-head { left: 6%; top: 34%; width: .6cqw; height: 15cqw; border-radius: 99px; background: var(--ps-navy); box-shadow: 0 0 0 .4cqw #fff; z-index: 2; opacity: 0; }
+
+.ps-buddy { width: 12cqw; display: grid; justify-items: center; gap: 1cqw; z-index: 4; transform-origin: 50% 100%; }
+.ps-ball { position: relative; width: 12cqw; aspect-ratio: 1; }
+.ps-ball .bd { position: absolute; inset: -14%; width: 128%; height: 128%; }
+.ps-num { position: absolute; z-index: 2; right: -1.2cqw; top: -.4cqw; display: grid; place-items: center; width: 4cqw; aspect-ratio: 1; border-radius: 50%; background: #fff; color: var(--ps-navy); font: 600 max(10px, 1.6cqw)/1 var(--font-mono); box-shadow: 0 .6cqw 1.2cqw -.4cqw rgb(4 10 42 / .4); }
+.ps-tag { display: inline-flex; align-items: center; gap: .7cqw; padding: .5cqw 1.2cqw; border-radius: 99px; font-family: var(--font-display); font-size: max(10px, 1.45cqw); font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.ps-tag em { font-style: normal; padding: .1cqw .9cqw; border-radius: 99px; background: color-mix(in srgb, var(--c) 16%, #fff); color: color-mix(in srgb, var(--c) 80%, #000); font-family: var(--font-body); font-weight: 600; }
+.ps-pencil { display: inline-grid; place-items: center; }
+.ps-tag svg.i { width: max(10px, 1.5cqw); height: max(10px, 1.5cqw); color: var(--brand); }
+
+.ps-bubble { width: 62cqw; display: grid; gap: .5cqw; padding: 1.6cqw 2.2cqw; border-radius: 2.6cqw; z-index: 3; box-shadow: inset .5cqw 0 0 var(--c), inset 0 -.6cqw 0 rgb(10 60 160 / .06), 0 1cqw 0 var(--ps-edge), 0 3cqw 5cqw -1.2cqw rgb(11 50 140 / .28); }
+.ps-bubble::before { content: ""; position: absolute; left: -1.6cqw; top: 2.2cqw; border: 1cqw solid transparent; border-right: 1.2cqw solid #fff; }
+.ps-ts { display: flex; align-items: center; gap: 1cqw; font-size: max(10px, 1.35cqw); color: var(--ink-3); }
+.ps-ts b { font-family: var(--font-mono); font-weight: 500; color: var(--ink-2); }
+.ps-ts span { font-weight: 600; color: color-mix(in srgb, var(--c) 85%, #000); }
+.ps-say { font-size: max(11px, 1.8cqw); line-height: 1.55; }
+.ps-w { border-radius: .5cqw; transition: background-color 120ms, color 120ms; }
+.ps-w.hot { background: color-mix(in srgb, var(--c) 22%, #fff); color: color-mix(in srgb, var(--c) 85%, #000); }
+
+.ps-note { width: 58cqw; display: grid; gap: 1.4cqw; padding: 2.6cqw 3cqw 3cqw; border-radius: 3.4cqw; z-index: 5; transform-origin: 0% 50%; }
+.ps-note-head { display: flex; align-items: center; justify-content: space-between; gap: 1cqw; font-size: max(10px, 1.4cqw); color: var(--ink-3); }
+.ps-note-head span { display: inline-flex; align-items: center; gap: .8cqw; font-weight: 600; color: var(--brand-hover); }
+.ps-note-head svg.i { width: max(12px, 1.8cqw); height: max(12px, 1.8cqw); }
+.ps-note h3 { min-height: 1.35em; font-family: var(--font-display); font-size: max(14px, 2.4cqw); font-weight: 600; line-height: 1.35; }
+.ps-points { display: grid; gap: .6cqw; }
+.ps-points li { position: relative; padding-left: 2.2cqw; font-size: max(11px, 1.6cqw); color: var(--ink-2); }
+.ps-points li::before { content: ""; position: absolute; left: 0; top: .75em; width: 1cqw; height: 1cqw; border-radius: 50%; background: var(--ps-cyan); translate: 0 -50%; }
+.ps-sub { font-size: max(10px, 1.3cqw); font-weight: 600; letter-spacing: .04em; color: var(--ink-3); }
+.ps-todos { display: grid; gap: .9cqw; }
+.ps-todos li { display: flex; align-items: center; gap: 1.2cqw; font-size: max(11px, 1.6cqw); }
+.ps-todos em { margin-left: auto; font-style: normal; font-size: max(9px, 1.2cqw); padding: .1cqw 1cqw; border-radius: 99px; background: var(--brand-soft); color: var(--brand-hover); }
+.ps-cb { display: grid; place-items: center; flex: none; width: 3cqw; aspect-ratio: 1; border-radius: .9cqw; background: #e9f0fa; box-shadow: inset 0 .3cqw .4cqw rgb(10 40 100 / .15); }
+.ps-cb svg { width: 75%; height: 75%; fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.ps-dls { display: flex; flex-wrap: wrap; gap: 1.2cqw; margin-top: .4cqw; }
+.ps-dl { display: inline-flex; align-items: center; gap: .8cqw; padding: 1cqw 1.8cqw; border-radius: 99px; font-size: max(10px, 1.45cqw); font-weight: 600; box-shadow: inset 0 -.5cqw 0 rgb(0 0 0 / .14), 0 .8cqw 0 var(--dl-edge), 0 2cqw 3cqw -1cqw rgb(11 50 140 / .35); }
+.ps-dl svg.i { width: max(12px, 1.7cqw); height: max(12px, 1.7cqw); }
+.ps-dl-primary { --dl-edge: #0a4f9c; background: var(--brand); color: #fff; }
+.ps-dl-ghost { --dl-edge: #cddcf0; background: #fff; color: var(--brand-hover); }
+
+/* Mochi buddy. Layers: .bd-act (GSAP: pop / jump) > .bd-idle (CSS: breathe) > .bd-body (GSAP: talk squash) */
+.ps .bd { display: block; overflow: visible; }
+.ps .bd-ground { fill: rgb(10 17 51 / .14); }
+.ps .bd-fill { fill: var(--c); }
+.ps .bd-shade { fill: color-mix(in srgb, var(--c) 62%, #000); opacity: .32; }
+.ps .bd-light { fill: #fff; opacity: .5; }
+.ps .bd-eye { fill: #0a1133; }
+.ps .bd-glint { fill: #fff; }
+.ps .bd-blush { fill: #ff7aa8; opacity: .6; }
+.ps .bd-mouth { fill: none; stroke: #0a1133; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.ps .bd-mouth-o { fill: #4a1230; }
+.ps .bd-tongue { fill: #ff7aa8; }
+.ps .bd-spark { fill: #ffc93c; }
+.ps .bd-idle, .ps .bd-blink { transform-box: fill-box; }
+.ps .bd-idle { transform-origin: 50% 100%; animation: ps-breathe 2.4s ease-in-out infinite alternate; animation-delay: calc(var(--n, 0) * -.7s); }
+.ps .bd-blink { transform-origin: 50% 50%; animation: ps-blink 4.6s infinite; animation-delay: calc(var(--n, 0) * -1.5s); }
+@keyframes ps-breathe { to { transform: scale(1.04, .955); } }
+@keyframes ps-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.08); } }
+
+/* the pause button also stops the CSS loops (breathing, blinking, floating blobs) */
+.ps[data-paused="true"] * { animation-play-state: paused !important; }
+
+/* the login stage makes room for the scene: tighter rhythm and a two-line pitch; short screens drop the sub-line,
+   which says in words what the scene shows */
+@media (width > 860px) {
+  .login-stage:has(> .ps) { gap: 24px; }
+  .login-stage:has(> .ps) .pitch { font-size: clamp(26px, 2.4vw, 36px); max-width: 24ch; }
+}
+@media (width > 860px) and (max-height: 820px) {
+  .login-stage:has(> .ps) { padding-block: 24px; gap: 18px; }
+  .login-stage:has(> .ps) .pitch-sub { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-toggle { display: none; } /* nothing moves, nothing to pause */
+}
+@media (max-width: 860px) {
+  .ps { display: none; }
+}

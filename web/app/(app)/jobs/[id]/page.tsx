@@ -12,7 +12,7 @@ import { ci, clamp, etaText, fmtSize, initialOf, tc, thDur, thWhen } from "@/lib
 import { saveSummary } from "@/lib/exports";
 import { useJobs } from "@/lib/jobs";
 import { splitMatches } from "@/lib/libraryFilters";
-import { splitWords, wordAt, type Word } from "@/lib/words";
+import { splitWords, wordAt, type TimedToken, type Word } from "@/lib/words";
 
 const RM = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -29,11 +29,32 @@ function findSeg(segs: Segment[], t: number) {
   return ans >= 0 && t < segs[ans].end ? ans : -1;
 }
 
+interface TranscriptHit {
+  line: number;
+  /** Zero-based occurrence within this transcript segment. */
+  occurrence: number;
+}
+
+function transcriptHits(segs: Segment[], query: string): TranscriptHit[] {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return [];
+  const found: TranscriptHit[] = [];
+  segs.forEach((segment, line) => {
+    const text = segment.text.toLocaleLowerCase();
+    let occurrence = 0;
+    for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length)) {
+      found.push({ line, occurrence });
+      occurrence += 1;
+    }
+  });
+  return found;
+}
+
 function changesLabel(j: JobDetail) {
   const c = j.transcript_meta?.correct;
   if (!c) return "บันทึกการตรวจแก้";
-  const fixed = c.applied_correction + c.applied_number;
-  return c.names_to_confirm > 0 ? `ตรวจแก้ ${fixed} จุด · ชื่อรอยืนยัน ${c.names_to_confirm}` : `ตรวจแก้ ${fixed} จุด`;
+  const fixed = c.applied_correction + c.applied_number + (c.applied_name ?? 0);
+  return `Gemini ตรวจแก้ ${fixed} จุด`;
 }
 
 interface RenameResult {
@@ -57,8 +78,15 @@ export default function JobPage() {
   const load = useCallback(async () => {
     try {
       const j = await api<JobDetail>(`/api/jobs/${id}`);
-      if (j.status === "uploading" || j.status === "failed") {
-        toast(j.status === "uploading" ? "ยังเปิดดูไม่ได้ รอให้อัปโหลดเสร็จก่อน" : "งานนี้ถอดเสียงไม่สำเร็จ กด “ลองอีกครั้ง” ที่หน้ารายการงาน", { kind: "err" });
+      if (j.status === "uploading" || j.status === "failed" || j.downloading) {
+        toast(
+          j.status === "failed"
+            ? "งานนี้ถอดเสียงไม่สำเร็จ กด “ลองอีกครั้ง” ที่หน้ารายการงาน"
+            : j.downloading
+              ? "ยังเปิดดูไม่ได้ รอให้ดาวน์โหลดวิดีโอจากลิงก์เสร็จก่อน"
+              : "ยังเปิดดูไม่ได้ รอให้อัปโหลดเสร็จก่อน",
+          { kind: "err" },
+        );
         router.replace("/");
         return;
       }
@@ -150,6 +178,9 @@ function JobView({
   const [rate, setRate] = useState(1);
   const [follow, setFollow] = useState(true);
   const [q, setQ] = useState(() => linkParams.get("q") ?? "");
+  const [hitAt, setHitAt] = useState(0);
+  const [replaceWith, setReplaceWith] = useState("");
+  const [replacing, setReplacing] = useState(false);
   const [renaming, setRenaming] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [flash, setFlash] = useState<{ d: number; k: number } | null>(null);
@@ -168,8 +199,24 @@ function JobView({
   useEffect(() => {
     curRef.current = cur;
   }, [cur]);
-  // Word being spoken inside the current line (estimated, see lib/words.ts), for caption and transcript.
-  const words = useMemo(() => segs.map((g) => splitWords(g.text)), [segs]);
+  // Timing data is separate because this page polls job details while processing; download the larger payload once.
+  const [timings, setTimings] = useState<(TimedToken[] | null)[] | null>(null);
+  useEffect(() => {
+    if (!segs.length || timings !== null) return;
+    let current = true;
+    api<{ timings: (TimedToken[] | null)[] }>(`/api/jobs/${job.id}/transcript-timings`).then(
+      (result) => {
+        if (current) setTimings(result.timings);
+      },
+      () => {
+        if (current) setTimings([]);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [job.id, segs.length, timings]);
+  const words = useMemo(() => segs.map((g, i) => splitWords(g.text, timings?.[i] ?? [])), [segs, timings]);
   const wordsRef = useRef(words);
   const [word, setWord] = useState(-1);
   const wordRef = useRef(-1);
@@ -199,7 +246,7 @@ function JobView({
     const idx = findSeg(segsRef.current, t);
     if (idx !== curRef.current) setCur(idx);
     const g = segsRef.current[idx];
-    const w = g ? wordAt(wordsRef.current[idx] ?? [], (t - g.start) / Math.max(0.1, g.end - g.start)) : -1;
+    const w = g ? wordAt(wordsRef.current[idx] ?? [], t, g.start, g.end) : -1;
     if (w !== wordRef.current) {
       wordRef.current = w;
       setWord(w);
@@ -320,11 +367,27 @@ function JobView({
   const s = cur >= 0 ? segs[cur] : null;
   const spkName = (i: number) => job.speakers[i]?.name ?? `ผู้พูด ${i + 1}`;
 
-  const hits = useMemo(() => {
-    const needle = q.trim();
-    if (!needle) return 0;
-    return segs.reduce((n, g) => n + splitMatches(g.text, needle).filter((p) => p.hit).length, 0);
-  }, [q, segs]);
+  const searchHits = useMemo(() => transcriptHits(segs, q), [q, segs]);
+  const hits = searchHits.length;
+  const activeHitIndex = hits ? Math.min(hitAt, hits - 1) : 0;
+  const activeHit = searchHits[activeHitIndex];
+
+  const goToHit = useCallback(
+    (index: number) => {
+      if (!searchHits.length) return;
+      const next = (index + searchHits.length) % searchHits.length;
+      const target = searchHits[next];
+      setHitAt(next);
+      setFollow(false);
+      seekTo(segs[target.line].start + 0.01);
+      requestAnimationFrame(() => {
+        txRef.current
+          ?.querySelector<HTMLElement>('[data-current-search-hit="true"]')
+          ?.scrollIntoView({ block: "center", behavior: RM() ? "auto" : "smooth" });
+      });
+    },
+    [searchHits, seekTo, segs],
+  );
 
   const saveName = async (i: number, value: string, undo = false) => {
     setRenaming(null);
@@ -374,6 +437,50 @@ function JobView({
     } catch (e) {
       put(old);
       toast((e as Error).message, { kind: "err" });
+    }
+  };
+
+  const replaceTranscript = async (scope: "one" | "all") => {
+    const search = q.trim();
+    const replacement = replaceWith.replace(/\s+/g, " ").trim();
+    if (!search || !replacement || replacing || !activeHit) return;
+    if (scope === "all" && hits > 1 && !window.confirm(`แทนที่ “${search}” ทั้ง ${hits} ตำแหน่งด้วย “${replacement}” ใช่หรือไม่`)) return;
+    setReplacing(true);
+    try {
+      const result = await api<{ changed: { idx: number; text: string }[]; replaced: number; summary_stale: boolean }>(
+        `/api/jobs/${job.id}/transcript/replace`,
+        {
+          method: "POST",
+          body: {
+            search,
+            replacement,
+            scope,
+            line: scope === "one" ? activeHit.line : undefined,
+            occurrence: scope === "one" ? activeHit.occurrence : undefined,
+          },
+        },
+      );
+      const changed = new Map(result.changed.map((item) => [item.idx, item.text]));
+      setJob((current) =>
+        current
+          ? {
+              ...current,
+              segments: current.segments.map((segment, index) =>
+                changed.has(index) ? { ...segment, text: changed.get(index)! } : segment,
+              ),
+              summary_stale: result.summary_stale,
+            }
+          : current,
+      );
+      setHitAt(scope === "all" ? 0 : activeHitIndex);
+      toast(
+        `แทนที่ “${search}” เป็น “${replacement}” แล้ว ${result.replaced} ตำแหน่ง${result.summary_stale ? " · กรุณาสรุปใหม่เมื่อตรวจเสร็จ" : ""}`,
+        { icon: "pencil" },
+      );
+    } catch (error) {
+      toast((error as Error).message, { kind: "err" });
+    } finally {
+      setReplacing(false);
     }
   };
   const editRef = useRef({ edit: (i: number) => setEditing(i), save: saveText, cancel: () => {} });
@@ -891,11 +998,36 @@ function JobView({
                       </span>
                     </div>
                     <div className="tx-tools">
-                      <label className="search">
-                        <Icon name="search" />
-                        <span className="sr-only">ค้นหาในทรานสคริปต์</span>
-                        <input type="search" placeholder="ค้นหาคำในทรานสคริปต์" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} data-testid="tx-search" />
-                      </label>
+                      <div className="tx-find">
+                        <label className="search">
+                          <Icon name="search" />
+                          <span className="sr-only">ค้นหาในทรานสคริปต์</span>
+                          <input
+                            type="search"
+                            placeholder="ค้นหาคำในทรานสคริปต์"
+                            autoComplete="off"
+                            value={q}
+                            onChange={(event) => {
+                              setQ(event.target.value);
+                              setHitAt(0);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && hits) {
+                                event.preventDefault();
+                                goToHit(activeHitIndex + (event.shiftKey ? -1 : 1));
+                              }
+                            }}
+                            data-testid="tx-search"
+                          />
+                        </label>
+                        <span className="tx-hit-count" aria-live="polite">{hits ? `${activeHitIndex + 1}/${hits}` : "0/0"}</span>
+                        <button className="icon-btn tx-hit-nav" type="button" disabled={!hits} aria-label="ผลการค้นหาก่อนหน้า" data-testid="tx-search-prev" onClick={() => goToHit(activeHitIndex - 1)}>
+                          <Icon name="chevron-left" />
+                        </button>
+                        <button className="icon-btn tx-hit-nav next" type="button" disabled={!hits} aria-label="ผลการค้นหาถัดไป" data-testid="tx-search-next" onClick={() => goToHit(activeHitIndex + 1)}>
+                          <Icon name="chevron-left" />
+                        </button>
+                      </div>
                       <label className="follow">
                         <input
                           className="switch"
@@ -911,9 +1043,38 @@ function JobView({
                       </label>
                     </div>
                     {q.trim() && (
-                      <p className="tx-found" aria-live="polite" data-testid="tx-found">
-                        {hits ? `พบ “${q.trim()}” ${hits} ตำแหน่ง · กดที่ประโยคเพื่อข้ามไปฟัง` : `ไม่พบ “${q.trim()}” ลองใช้คำที่สั้นลง`}
-                      </p>
+                      <>
+                        <p className="tx-found" aria-live="polite" data-testid="tx-found">
+                          {hits ? `พบ “${q.trim()}” ${hits} ตำแหน่ง · Enter ไปจุดถัดไป · Shift+Enter ย้อนกลับ` : `ไม่พบ “${q.trim()}” ลองใช้คำที่สั้นลง`}
+                        </p>
+                        {hits > 0 && canEdit && (
+                          <div className="tx-replace" data-testid="tx-replace">
+                            <label>
+                              <span className="sr-only">แทนที่ด้วย</span>
+                              <input
+                                type="text"
+                                value={replaceWith}
+                                maxLength={200}
+                                placeholder="แทนที่ด้วย…"
+                                onChange={(event) => setReplaceWith(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" && replaceWith.trim()) {
+                                    event.preventDefault();
+                                    replaceTranscript("one");
+                                  }
+                                }}
+                                data-testid="tx-replacement"
+                              />
+                            </label>
+                            <button className="btn btn-secondary btn-sm" type="button" disabled={!replaceWith.trim() || replacing} data-testid="tx-replace-one" onClick={() => replaceTranscript("one")}>
+                              แทนที่จุดนี้
+                            </button>
+                            <button className="btn btn-secondary btn-sm" type="button" disabled={!replaceWith.trim() || replacing} data-testid="tx-replace-all" onClick={() => replaceTranscript("all")}>
+                              แทนที่ทั้งหมด ({hits})
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   <ol
@@ -934,6 +1095,7 @@ function JobView({
                         words={words[i]}
                         at={i === cur ? word : -1}
                         q={q.trim()}
+                        activeOccurrence={activeHit?.line === i ? activeHit.occurrence : null}
                         onSeek={onSeekLine}
                         canEdit={canEdit}
                         editing={editing === i}
@@ -997,6 +1159,7 @@ const SegLine = memo(function SegLine({
   words,
   at,
   q,
+  activeOccurrence,
   onSeek,
   canEdit,
   editing,
@@ -1013,6 +1176,7 @@ const SegLine = memo(function SegLine({
   /** Word being spoken when this is the current line, else -1. */
   at: number;
   q: string;
+  activeOccurrence: number | null;
   onSeek: (i: number) => void;
   canEdit: boolean;
   editing: boolean;
@@ -1078,7 +1242,7 @@ const SegLine = memo(function SegLine({
   }
   return (
     <li className={canEdit ? "can-edit" : undefined} style={i < 14 ? { ["--seg-delay" as string]: `${i * 35}ms` } : undefined}>
-      <button className={`seg c${ci(g.speaker)}${cont ? " cont" : ""}${on ? " on" : ""}${hit ? " hit" : ""}`} type="button" data-i={i} aria-current={on || undefined} onClick={() => onSeek(i)}>
+      <button className={`seg c${ci(g.speaker)}${cont ? " cont" : ""}${on ? " on" : ""}${hit ? " hit" : ""}${activeOccurrence !== null ? " search-current" : ""}`} type="button" data-i={i} aria-current={on || undefined} onClick={() => onSeek(i)}>
         <span className="seg-time">{tc(g.start)}</span>
         <span className="seg-body">
           {cont ? (
@@ -1091,7 +1255,15 @@ const SegLine = memo(function SegLine({
           )}
           <span className="seg-text">
             {hit ? (
-              parts!.map((p, k) => (p.hit ? <mark key={k}>{p.t}</mark> : <span key={k}>{p.t}</span>))
+              (() => {
+                let occurrence = -1;
+                return parts!.map((part, index) => {
+                  if (!part.hit) return <span key={index}>{part.t}</span>;
+                  occurrence += 1;
+                  const current = occurrence === activeOccurrence;
+                  return <mark key={index} className={current ? "current" : undefined} data-current-search-hit={current || undefined}>{part.t}</mark>;
+                });
+              })()
             ) : on && at >= 0 ? (
               <Spoken words={words} at={at} />
             ) : (

@@ -11,10 +11,12 @@ import { Icon } from "./Icon";
 export function pipeFractions(j: Job, up?: UploadState): number[] {
   if (j.status === "uploading") return [up ? up.loaded / Math.max(1, up.total) : 0, 0, 0, 0];
   if (j.status === "done") return [1, 1, 1, 1];
+  // A job from a link: the first step is the server's download instead of the browser's upload.
+  if (j.downloading) return [j.stage_pct, 0, 0, 0];
   return [1, ...[0, 1, 2].map((k) => (k < j.stage ? 1 : k === j.stage ? j.stage_pct : 0))];
 }
 
-const actIdx = (j: Job) => (j.status === "uploading" ? 0 : j.status === "processing" ? j.stage + 1 : -1);
+const actIdx = (j: Job) => (j.status === "uploading" ? 0 : j.status === "processing" ? (j.downloading ? 0 : j.stage + 1) : -1);
 
 function uploadEta(up: UploadState) {
   const elapsed = (performance.now() - up.startedAt) / 1000;
@@ -55,6 +57,29 @@ function StatusBlock({ j, up }: { j: Job; up?: UploadState }) {
         <span className="pipe-label" data-lbl>
           <span className="mono">{Math.round((up.loaded / Math.max(1, up.total)) * 100)}%</span> · {fmtSize(up.loaded)} จาก {fmtSize(up.total)}
           {uploadEta(up)}
+        </span>
+      </>
+    );
+  }
+  if (j.status === "processing" && j.downloading) {
+    const known = j.size_bytes > 0 || j.stage_pct > 0;
+    return (
+      <>
+        <span className="pill up">
+          <Icon name="download" />
+          กำลังดาวน์โหลด
+        </span>
+        {pipe}
+        <span className="pipe-label" data-lbl>
+          {known ? (
+            <>
+              <span className="mono">{Math.round(j.stage_pct * 100)}%</span>
+              {j.size_bytes > 0 ? ` · ${fmtSize(j.size_bytes * j.stage_pct)} จาก ${fmtSize(j.size_bytes)}` : ""}
+              {j.eta_sec != null ? ` · ${etaText(j.eta_sec)}` : ""}
+            </>
+          ) : (
+            `กำลังอ่านลิงก์${j.source_host ? `จาก ${j.source_host}` : ""}…`
+          )}
         </span>
       </>
     );
@@ -127,12 +152,13 @@ interface Props {
   match?: TranscriptMatch;
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
+  onRetranscribe: (id: string) => void;
   onRemove: (id: string) => void;
   onDownload: (id: string, opener: HTMLElement) => void;
 }
 
-export const JobRow = memo(function JobRow({ j, up, index, isNew, justDone, q, match, onCancel, onRetry, onRemove, onDownload }: Props) {
-  const playable = j.status === "processing" || j.status === "done";
+export const JobRow = memo(function JobRow({ j, up, index, isNew, justDone, q, match, onCancel, onRetry, onRetranscribe, onRemove, onDownload }: Props) {
+  const playable = (j.status === "processing" && !j.downloading) || j.status === "done";
   const duration = j.duration_sec ?? up?.duration;
   const thumbInner = (
     <>
@@ -181,10 +207,18 @@ export const JobRow = memo(function JobRow({ j, up, index, isNew, justDone, q, m
           </span>
         )}
         <div className="job-meta">
-          <span>
-            <Icon name="hdd" />
-            {fmtSize(j.size_bytes)}
-          </span>
+          {j.source_host && (
+            <span title="สร้างจากลิงก์">
+              <Icon name="link" />
+              {j.source_host}
+            </span>
+          )}
+          {j.size_bytes > 0 && (
+            <span>
+              <Icon name="hdd" />
+              {fmtSize(j.size_bytes)}
+            </span>
+          )}
           <span>
             <Icon name="clock" />
             {thWhen(j.created_at)}
@@ -212,7 +246,7 @@ export const JobRow = memo(function JobRow({ j, up, index, isNew, justDone, q, m
         <StatusBlock j={j} up={up} />
       </div>
       <div className="job-actions">
-        {j.status === "uploading" ? (
+        {j.status === "uploading" || (j.status === "processing" && j.downloading) ? (
           <button className="btn btn-secondary btn-sm" type="button" onClick={() => onCancel(j.id)}>
             <Icon name="x" />
             ยกเลิก
@@ -233,6 +267,12 @@ export const JobRow = memo(function JobRow({ j, up, index, isNew, justDone, q, m
               <Icon name="play" />
               เล่นวิดีโอ
             </Link>
+            {j.status === "done" && (
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => onRetranscribe(j.id)}>
+                <Icon name="refresh" />
+                ถอดเสียงใหม่
+              </button>
+            )}
             <button
               className="icon-btn"
               type="button"

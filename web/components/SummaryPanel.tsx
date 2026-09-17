@@ -7,12 +7,25 @@ import { saveSummary } from "@/lib/exports";
 import { Icon } from "./Icon";
 import { useToast } from "./Toasts";
 
-const KIND_LABEL: Record<Minutes["segments"][number]["kind"], string> = { report: "รายงาน", advice: "ข้อชี้แนะ", discussion: "ถาม-ตอบ" };
-
 function heading(s: Minutes["segments"][number]) {
-  if (s.kind === "report") return `${s.speaker} รายงานเรื่อง${s.subject}`;
-  if (s.kind === "advice") return `${s.speaker} ให้ข้อชี้แนะเรื่อง${s.subject}`;
-  return `ถาม-ตอบเรื่อง${s.subject} (${s.speaker})`;
+  if (s.kind === "report") return `วาระ: ${s.subject.replace(/^วาระ:\s*/, "")}`;
+  if (s.kind === "advice") return `ข้อชี้แนะจาก${s.speaker}`;
+  return `ประเด็นถาม-ตอบ: ${s.subject}`;
+}
+
+function actionHeading(items: Minutes["action_items"]) {
+  const requesters = [...new Set(items.map((a) => a.requested_by).filter((name): name is string => Boolean(name)))];
+  return requesters.length === 1 && items.every((a) => a.requested_by?.trim()) ? `สรุปงานที่${requesters[0]}มอบหมาย` : "สรุปงานที่ได้รับมอบหมาย";
+}
+
+function groupActions(items: Minutes["action_items"]) {
+  const groups: { owner: string | null; items: Minutes["action_items"] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (!last || last.owner !== item.owner || last.items[0].assigned_on !== item.assigned_on || last.items[0].requested_by !== item.requested_by) groups.push({ owner: item.owner, items: [item] });
+    else last.items.push(item);
+  }
+  return groups;
 }
 
 function Stamp({ at, onSeek }: { at: string; onSeek: (t: number) => void }) {
@@ -25,7 +38,15 @@ function Stamp({ at, onSeek }: { at: string; onSeek: (t: number) => void }) {
   );
 }
 
-export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSeek: (t: number) => void; onRetried: () => void }) {
+export function SummaryPanel({
+  job,
+  onSeek,
+  onRetried,
+}: {
+  job: JobDetail;
+  onSeek: (t: number) => void;
+  onRetried: () => void;
+}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const m = job.summary;
@@ -82,6 +103,7 @@ export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSee
 
   const checks = job.summary_meta?.checks;
   const issues = checks ? checks.quotes_not_in_transcript.length + checks.quotes_outside_segment.length + checks.unmatched_citations.length : 0;
+  const actionGroups = groupActions(m.action_items);
 
   return (
     <div className="sum" data-testid="summary">
@@ -129,7 +151,7 @@ export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSee
       </div>
 
       <h3 className="sum-title">{m.title}</h3>
-      <p className="sum-overview">{m.overview}</p>
+      {m.overview && <p className="sum-overview">{m.overview}</p>}
 
       {m.participants.length > 0 && (
         <section className="sum-sec">
@@ -144,71 +166,68 @@ export function SummaryPanel({ job, onSeek, onRetried }: { job: JobDetail; onSee
         </section>
       )}
 
-      <section className="sum-sec">
-        <h4>ลำดับการประชุม</h4>
-        <ol className="sum-timeline">
-          {m.segments.map((s, i) => (
-            <li key={i}>
-              <Stamp at={s.start} onSeek={onSeek} />
-              <span className={`kind kind-${s.kind}`}>{KIND_LABEL[s.kind]}</span>
-              <span className="sum-tl-txt">
-                {s.speaker} · {s.subject}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
       {m.segments.map((s, i) => (
         <section className="sum-sec sum-seg" key={i}>
-          <h4>
-            {i + 1}. {heading(s)}
-          </h4>
+          <h4>{heading(s)}</h4>
+          {(s.kind === "report" || s.kind === "discussion") && <p className="sum-overview">โดย {s.speaker}</p>}
           <p className="sum-when">
             เวลา <Stamp at={s.start} onSeek={onSeek} />–<span className="mono">{s.end}</span>
             {s.responds_to ? ` · ต่อจากการรายงานเรื่อง${s.responds_to}` : ""}
           </p>
-          <ul className="sum-points">
-            {s.details.map((d, k) => (
-              <li key={k}>{d}</li>
-            ))}
-          </ul>
-          {s.quotes.length > 0 && (
-            <div className="sum-quotes">
-              {s.quotes.map((q, k) => (
-                <blockquote key={k}>
-                  “{q.text}” <Stamp at={q.timestamp} onSeek={onSeek} />
-                </blockquote>
+          {s.kind === "report" ? (
+            <div className="sum-points" style={{ paddingLeft: 0 }}>
+              {s.details.map((d, k) => <p key={k}>{d}</p>)}
+            </div>
+          ) : (
+            <ul className="sum-points">
+              {s.details.map((d, k) => <li key={k}>{d}</li>)}
+            </ul>
+          )}
+          {s.report_sections?.map((section, sectionIndex) => (
+            <div key={sectionIndex} className="sum-report-section">
+              {section.heading && <h5>{section.heading}</h5>}
+              {section.paragraphs.map((paragraph, k) => <p key={k}>{paragraph}</p>)}
+              {section.items.length > 0 && (section.numbered ? (
+                <ol className="sum-points">{section.items.map((item, k) => <li key={k}>{item}</li>)}</ol>
+              ) : (
+                <ul className="sum-points">{section.items.map((item, k) => <li key={k}>{item}</li>)}</ul>
               ))}
             </div>
-          )}
+          ))}
         </section>
       ))}
 
       <section className="sum-sec">
-        <h4>ข้อสั่งการ / สิ่งที่ต้องดำเนินการ</h4>
+        <h4>{actionHeading(m.action_items)}</h4>
         {m.action_items.length ? (
-          <ol className="sum-actions">
-            {m.action_items.map((a, i) => (
-              <li key={i}>
-                <p>{a.task}</p>
-                <p className="sum-meta">
-                  ผู้สั่งการ: {a.requested_by || "-"} · ผู้รับผิดชอบ: {a.owner || "-"} · กำหนด: {a.due || "-"}
-                  {a.timestamps.length > 0 && (
-                    <>
-                      {" · อ้างอิง "}
-                      {a.timestamps.map((t, k) => (
-                        <span key={k}>
-                          {k > 0 && ", "}
-                          <Stamp at={t} onSeek={onSeek} />
-                        </span>
-                      ))}
-                    </>
-                  )}
-                </p>
-              </li>
+          <div className="sum-actions">
+            {actionGroups.map((group, i) => (
+              <div key={`${group.owner ?? "unassigned"}-${i}`}>
+                <p><strong>{group.owner ? `ฝาก${group.owner}` : "งานที่ต้องดำเนินการ"}{group.items[0].assigned_on ? ` เมื่อวันที่ ${group.items[0].assigned_on}` : ""}</strong></p>
+                <ul className="sum-points">
+                  {group.items.map((a, k) => (
+                    <li key={k}>
+                      <p>{a.task}</p>
+                      <p className="sum-meta">
+                        ผู้สั่งการ: {a.requested_by || "-"} · กำหนด: {a.due || "-"}
+                        {a.timestamps.length > 0 && (
+                          <>
+                            {" · อ้างอิง "}
+                            {a.timestamps.map((t, stampIndex) => (
+                              <span key={stampIndex}>
+                                {stampIndex > 0 && ", "}
+                                <Stamp at={t} onSeek={onSeek} />
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ol>
+          </div>
         ) : (
           <p className="sum-meta">ไม่มี</p>
         )}

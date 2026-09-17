@@ -59,10 +59,12 @@ function LibraryPage() {
   const router = useRouter();
   const params = useSearchParams();
   const filters = useMemo(() => parseFilters(new URLSearchParams(params.toString())), [params]);
-  const { jobs, uploads, loaded, setLibraryHref, addUpload, cancelUpload, retry, remove, celebrateId } = useJobs();
+  const { jobs, uploads, loaded, setLibraryHref, addUpload, addLink, cancelUpload, retry, retranscribe, remove, celebrateId } = useJobs();
   const toast = useToast();
   const [over, setOver] = useState(false);
   const [got, setGot] = useState(0);
+  const [link, setLink] = useState("");
+  const [importing, setImporting] = useState(false);
   // Shown under the upload area so it's clear which terms new uploads are transcribed with.
   const [keyterms, setKeyterms] = useState<KeytermSettings | null>(null);
   useEffect(() => {
@@ -157,6 +159,21 @@ function LibraryPage() {
     [addUpload, clearFilters, filters],
   );
 
+  const onLink = useCallback(
+    async (url: string) => {
+      if (!url.trim() || importing) return;
+      if (hasActiveFilters(filters)) clearFilters();
+      setImporting(true);
+      const ok = await addLink(url.trim());
+      setImporting(false);
+      if (ok) {
+        setLink("");
+        setGot((n) => n + 1);
+      }
+    },
+    [addLink, clearFilters, filters, importing],
+  );
+
   useEffect(() => {
     const prevent = (e: DragEvent) => e.preventDefault();
     // "/" jumps to search, like most list views.
@@ -202,17 +219,17 @@ function LibraryPage() {
       <div className="lib-head">
         <div>
           <h1 tabIndex={-1}>ถอดเสียงวิดีโอ</h1>
-          <p>อัปโหลดไฟล์แล้วระบบจะถอดเสียงเป็นข้อความ แยกผู้พูด และสรุปการประชุมอยู่เบื้องหลัง ระหว่างรอ คุณเปิดดูวิดีโอหรือทำงานอื่นต่อได้เลย</p>
+          <p>อัปโหลดไฟล์หรือวางลิงก์วิดีโอ แล้วระบบจะถอดเสียงเป็นข้อความ แยกผู้พูด และสรุปการประชุมอยู่เบื้องหลัง ระหว่างรอ คุณเปิดดูวิดีโอหรือทำงานอื่นต่อได้เลย</p>
         </div>
       </div>
 
-      {/* The whole area opens the file picker; the button inside is the visible, keyboard-reachable way in. */}
+      {/* The whole area opens the file picker (except the link form); the button inside is the visible, keyboard-reachable way in. */}
       <div
         key={got}
         className={`drop${over ? " is-over" : ""}${got ? " got" : ""}`}
         data-testid="drop"
         onClick={(e) => {
-          if (!(e.target as HTMLElement).closest("button")) fileIn.current?.click();
+          if (!(e.target as HTMLElement).closest("button, form")) fileIn.current?.click();
         }}
         onDragEnter={(e) => {
           e.preventDefault();
@@ -231,7 +248,10 @@ function LibraryPage() {
           e.preventDefault();
           depth.current = 0;
           setOver(false);
-          onFiles(e.dataTransfer.files);
+          if (e.dataTransfer.files.length) return onFiles(e.dataTransfer.files);
+          // A link dragged from another tab or the address bar.
+          const dropped = (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain")).split(/\r?\n/).find((l) => l && !l.startsWith("#"));
+          if (dropped && /^https?:\/\//i.test(dropped.trim())) onLink(dropped);
         }}
       >
         <div className="drop-ic" aria-hidden="true">
@@ -240,8 +260,36 @@ function LibraryPage() {
         <div className="drop-main">
           <div>
             <p className="drop-title">ลากไฟล์วิดีโอมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</p>
-            <p className="drop-sub">MP4, MOV, MKV หรือ WEBM · ขนาดไม่เกิน 2 GB · ความยาวไม่เกิน 3 ชั่วโมง · ระบบแยกผู้พูดให้เอง</p>
+            <p className="drop-sub">MP4, MOV, MKV หรือ WEBM · ขนาดไม่เกิน 2 GB · ความยาวไม่เกิน 5 ชั่วโมง · ระบบแยกผู้พูดให้เอง</p>
           </div>
+          <form
+            className="drop-url"
+            data-testid="drop-url"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              onLink(link);
+            }}
+          >
+            <label className="search drop-url-field">
+              <Icon name="link" />
+              <span className="sr-only">ลิงก์วิดีโอ</span>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                enterKeyHint="go"
+                placeholder="หรือวางลิงก์วิดีโอ เช่น YouTube, Google Drive"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                data-testid="link-input"
+              />
+            </label>
+            <button className="btn btn-secondary" type="submit" disabled={!link.trim() || importing} data-testid="link-submit">
+              <Icon name={importing ? "loader" : "download"} className={importing ? "spin" : undefined} />
+              ดึงวิดีโอจากลิงก์
+            </button>
+          </form>
         </div>
         <div className="drop-actions">
           <button className="btn btn-primary" type="button" onClick={() => fileIn.current?.click()}>
@@ -403,6 +451,7 @@ function LibraryPage() {
               match={byId?.get(j.id)}
               onCancel={cancelUpload}
               onRetry={retry}
+              onRetranscribe={retranscribe}
               onRemove={remove}
               onDownload={openDownload}
             />

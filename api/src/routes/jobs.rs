@@ -6,6 +6,7 @@ use axum::extract::{Path, Query, Request, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use futures::StreamExt;
+use regex::RegexBuilder;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -14,13 +15,19 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::CurrentUser;
+use crate::download;
 use crate::error::{AppError, AppResult};
 use crate::jobs::{self, JobDetail};
 use crate::storage::{self, Get};
 
-const EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "mkv", "webm", "avi", "mp3", "m4a", "wav", "aac", "ogg", "flac"];
+const EXTENSIONS: &[&str] = &[
+    "mp4", "m4v", "mov", "mkv", "webm", "avi", "mp3", "m4a", "wav", "aac", "ogg", "flac",
+];
 
-pub async fn list(State(st): State<AppState>, CurrentUser(u): CurrentUser) -> AppResult<Json<Value>> {
+pub async fn list(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+) -> AppResult<Json<Value>> {
     let jobs = jobs::list_for_user(&st.db, u.id).await?;
     Ok(Json(json!({ "jobs": jobs })))
 }
@@ -31,7 +38,11 @@ pub struct SearchReq {
     q: String,
 }
 
-pub async fn search(State(st): State<AppState>, CurrentUser(u): CurrentUser, Query(req): Query<SearchReq>) -> AppResult<Json<Value>> {
+pub async fn search(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Query(req): Query<SearchReq>,
+) -> AppResult<Json<Value>> {
     let q: String = req.q.trim().chars().take(100).collect();
     if q.is_empty() {
         return Ok(Json(json!({ "matches": [] })));
@@ -46,21 +57,35 @@ pub struct CreateReq {
     size_bytes: i64,
 }
 
-pub async fn create(State(st): State<AppState>, CurrentUser(u): CurrentUser, Json(req): Json<CreateReq>) -> AppResult<Json<Value>> {
+pub async fn create(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Json(req): Json<CreateReq>,
+) -> AppResult<Json<Value>> {
     let name = req.name.trim();
-    let ext = FsPath::new(name).extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).unwrap_or_default();
+    let ext = FsPath::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
     if name.is_empty() || !EXTENSIONS.contains(&ext.as_str()) {
-        return Err(AppError::BadRequest(format!("“{name}” ไม่ใช่ไฟล์วิดีโอ เลือกไฟล์ MP4, MOV, MKV หรือ WEBM")));
+        return Err(AppError::BadRequest(format!(
+            "“{name}” ไม่ใช่ไฟล์วิดีโอ เลือกไฟล์ MP4, MOV, MKV หรือ WEBM"
+        )));
     }
     if req.size_bytes <= 0 {
         return Err(AppError::BadRequest(format!("“{name}” เป็นไฟล์ว่าง")));
     }
     if req.size_bytes as u64 > st.cfg.max_upload_bytes {
-        return Err(AppError::TooLarge(format!("“{name}” ใหญ่เกิน 2 GB ลองตัดวิดีโอเป็นช่วงสั้นลงแล้วอัปโหลดใหม่")));
+        return Err(AppError::TooLarge(format!(
+            "“{name}” ใหญ่เกิน 2 GB ลองตัดวิดีโอเป็นช่วงสั้นลงแล้วอัปโหลดใหม่"
+        )));
     }
     let id = Uuid::new_v4();
     // Later changes to the settings don't change how this job is transcribed, even on retry.
-    let keyterms = crate::settings::keyterms(&st.db, &st.cfg.default_keyterms, u.id).await?.terms;
+    let keyterms = crate::settings::keyterms(&st.db, &st.cfg.default_keyterms, u.id)
+        .await?
+        .terms;
     let job = sqlx::query_as::<_, jobs::Job>(
         "INSERT INTO jobs (id, user_id, name, size_bytes, source_ext, status, keyterms)
          VALUES ($1, $2, $3, $4, $5, 'uploading', $6) RETURNING *",
@@ -76,10 +101,51 @@ pub async fn create(State(st): State<AppState>, CurrentUser(u): CurrentUser, Jso
     Ok(Json(json!(job.view(0))))
 }
 
+#[derive(Deserialize)]
+pub struct ImportReq {
+    url: String,
+}
+
+/// A job from a link. Only the link is checked here; the worker downloads the video (download.rs), so the browser can be
+/// closed right away.
+pub async fn import(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Json(req): Json<ImportReq>,
+) -> AppResult<Json<Value>> {
+    let url = download::parse_url(&req.url).map_err(AppError::BadRequest)?;
+    download::check_host(&url, st.cfg.url_import_allow_private)
+        .await
+        .map_err(AppError::BadRequest)?;
+    let keyterms = crate::settings::keyterms(&st.db, &st.cfg.default_keyterms, u.id)
+        .await?
+        .terms;
+    // The size and extension are known once the file is downloaded.
+    let job = sqlx::query_as::<_, jobs::Job>(
+        "INSERT INTO jobs (id, user_id, name, size_bytes, source_ext, status, keyterms, source_url, downloading)
+         VALUES ($1, $2, $3, 0, 'mp4', 'processing', $4, $5, true) RETURNING *",
+    )
+    .bind(Uuid::new_v4())
+    .bind(u.id)
+    .bind(download::provisional_name(&url).chars().take(200).collect::<String>())
+    .bind(&keyterms)
+    .bind(url.as_str())
+    .fetch_one(&st.db)
+    .await?;
+    Ok(Json(json!(job.view(0))))
+}
+
 /// Raw request body = file bytes. Streams to the job's scratch directory (memory stays flat for 2 GB uploads), checks the
 /// size, stores the file in object storage, and only then queues the job. The scratch copy is left for the worker.
-pub async fn upload(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>, req: Request) -> AppResult<Json<Value>> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+pub async fn upload(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    req: Request,
+) -> AppResult<Json<Value>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     if job.status != jobs::STATUS_UPLOADING {
         return Err(AppError::Conflict("งานนี้อัปโหลดไฟล์ไปแล้ว".into()));
     }
@@ -93,7 +159,8 @@ pub async fn upload(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
 
     let outcome: Result<(), AppError> = async {
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| AppError::BadRequest(format!("การอัปโหลดถูกขัดจังหวะ ({e})")))?;
+            let chunk =
+                chunk.map_err(|e| AppError::BadRequest(format!("การอัปโหลดถูกขัดจังหวะ ({e})")))?;
             written += chunk.len() as u64;
             if written > limit {
                 return Err(AppError::TooLarge("ไฟล์ใหญ่เกิน 2 GB".into()));
@@ -103,7 +170,10 @@ pub async fn upload(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
         file.flush().await?;
         // A proxy that cuts the body short still ends the request cleanly; don't process a truncated file.
         if written > 0 && written != job.size_bytes as u64 {
-            return Err(AppError::BadRequest(format!("ได้รับไฟล์ไม่ครบ ({written} จาก {} ไบต์) ลองอัปโหลดใหม่อีกครั้ง", job.size_bytes)));
+            return Err(AppError::BadRequest(format!(
+                "ได้รับไฟล์ไม่ครบ ({written} จาก {} ไบต์) ลองอัปโหลดใหม่อีกครั้ง",
+                job.size_bytes
+            )));
         }
         Ok(())
     }
@@ -125,7 +195,11 @@ pub async fn upload(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
     let dest = dir.join(format!("{}.{}", storage::SOURCE, job.source_ext));
     tokio::fs::rename(&part, &dest).await?;
     let key = storage::source_key(id, &job.source_ext);
-    if let Err(e) = st.storage.put_file(&key, &dest, storage::content_type(&job.source_ext)).await {
+    if let Err(e) = st
+        .storage
+        .put_file(&key, &dest, storage::content_type(&job.source_ext))
+        .await
+    {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         sqlx::query("UPDATE jobs SET status = 'failed', error = 'บันทึกไฟล์ไม่สำเร็จ ลองอัปโหลดใหม่อีกครั้ง', updated_at = now() WHERE id = $1 AND status = 'uploading'")
             .bind(id)
@@ -147,14 +221,26 @@ pub async fn upload(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
         let _ = st.storage.delete_prefix(&storage::key(id, "")).await;
         return Err(AppError::NotFound);
     }
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     Ok(Json(json!(job.view(0))))
 }
 
-pub async fn detail(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Json<JobDetail>> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+pub async fn detail(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<JobDetail>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let segments = jobs::segments(&st.db, id).await?;
-    let (has_changes,): (bool,) = sqlx::query_as("SELECT changes_text IS NOT NULL FROM jobs WHERE id = $1").bind(id).fetch_one(&st.db).await?;
+    let (has_changes,): (bool,) =
+        sqlx::query_as("SELECT changes_text IS NOT NULL FROM jobs WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.db)
+            .await?;
     Ok(Json(JobDetail {
         job: job.view(segments.len() as i64),
         summary_stale: jobs::summary_stale(&job, &segments),
@@ -167,8 +253,31 @@ pub async fn detail(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
     }))
 }
 
-pub async fn delete(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Json<Value>> {
-    let r = sqlx::query("DELETE FROM jobs WHERE id = $1 AND user_id = $2").bind(id).bind(u.id).execute(&st.db).await?;
+/// Word timing data is loaded once by the player instead of being repeated in every job-detail polling response.
+pub async fn transcript_timings(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let segments = jobs::segments(&st.db, id).await?;
+    Ok(Json(
+        json!({ "timings": segments.into_iter().map(|segment| segment.tokens).collect::<Vec<_>>() }),
+    ))
+}
+
+pub async fn delete(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    let r = sqlx::query("DELETE FROM jobs WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(u.id)
+        .execute(&st.db)
+        .await?;
     if r.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -179,27 +288,124 @@ pub async fn delete(State(st): State<AppState>, CurrentUser(u): CurrentUser, Pat
     Ok(Json(json!({ "ok": true })))
 }
 
-pub async fn retry(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Json<Value>> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+pub async fn retry(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     if job.status != jobs::STATUS_FAILED {
         return Err(AppError::Conflict("งานนี้ไม่ได้อยู่ในสถานะไม่สำเร็จ".into()));
     }
-    if !st.storage.exists(&storage::source_key(id, &job.source_ext)).await? {
-        return Err(AppError::Conflict("ไม่มีไฟล์ต้นฉบับของงานนี้แล้ว กรุณาอัปโหลดใหม่".into()));
+    // A job from a link that never finished downloading downloads again.
+    if !job.downloading
+        && !st
+            .storage
+            .exists(&storage::source_key(id, &job.source_ext))
+            .await?
+    {
+        return Err(AppError::Conflict(
+            "ไม่มีไฟล์ต้นฉบับของงานนี้แล้ว กรุณาอัปโหลดใหม่".into(),
+        ));
     }
     sqlx::query(
-        "UPDATE jobs SET status = 'processing', error = NULL, stage_pct = 0, attempts = 0, locked_by = NULL, locked_at = NULL, updated_at = now()
-         WHERE id = $1",
+        "UPDATE jobs SET status = 'processing', error = NULL, stage_pct = 0, eta_sec = NULL, attempts = 0, locked_by = NULL, locked_at = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'failed'",
     )
     .bind(id)
     .execute(&st.db)
     .await?;
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let n = jobs::segment_count(&st.db, id).await?;
     Ok(Json(json!(job.view(n))))
 }
 
-pub async fn retry_summary(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Json<Value>> {
+/// Discards the derived transcript and summary, then queues the original media for a fresh speech-to-text run.
+pub async fn retranscribe(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if job.status != jobs::STATUS_DONE {
+        return Err(AppError::Conflict(
+            "ถอดเสียงใหม่ได้เมื่องานเดิมเสร็จแล้วเท่านั้น".into(),
+        ));
+    }
+
+    let audio_key = storage::key(id, storage::AUDIO);
+    let have_audio = st.storage.exists(&audio_key).await?;
+    let have_source = st
+        .storage
+        .exists(&storage::source_key(id, &job.source_ext))
+        .await?;
+    if !have_audio && !have_source {
+        return Err(AppError::Conflict(
+            "ไม่มีไฟล์ต้นฉบับหรือไฟล์เสียงของงานนี้แล้ว กรุณาอัปโหลดใหม่".into(),
+        ));
+    }
+
+    // Ordinary retries reuse stt.json, so it must be removed before this job becomes claimable again.
+    st.storage.delete(&storage::key(id, storage::STT)).await?;
+    let stage = if have_audio {
+        jobs::STAGE_TRANSCRIBE
+    } else {
+        jobs::STAGE_EXTRACT
+    };
+    let eta = job.duration_sec.map(|d| {
+        let pipeline = crate::pipeline::stt_seconds(d)
+            + crate::pipeline::correct_seconds(d)
+            + crate::pipeline::summary_seconds(d);
+        if have_audio {
+            pipeline
+        } else {
+            3.0 + d * 0.01 + pipeline
+        }
+    });
+    let mut tx = st.db.begin().await?;
+    let r = sqlx::query(
+        "UPDATE jobs SET status = 'processing', stage = $3, stage_pct = 0, eta_sec = $4, error = NULL,
+             speakers = '[]'::jsonb, transcript_meta = NULL, corrections = NULL, changes_text = NULL,
+             summary_status = 'waiting', summary = NULL, summary_text = NULL, summary_meta = NULL, summary_error = NULL,
+             clarifications = NULL, clarification_answers = NULL, clarification_unresolved = '[]'::jsonb,
+             clarification_completed_at = NULL, summary_revision = NULL,
+             attempts = 0, locked_by = NULL, locked_at = NULL, finished_at = NULL, updated_at = now()
+         WHERE id = $1 AND user_id = $2 AND status = 'done'",
+    )
+    .bind(id)
+    .bind(u.id)
+    .bind(stage)
+    .bind(eta)
+    .execute(&mut *tx)
+    .await?;
+    if r.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(AppError::Conflict("งานนี้กำลังถูกประมวลผลอยู่".into()));
+    }
+    sqlx::query("DELETE FROM segments WHERE job_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    let _ = tokio::fs::remove_dir_all(st.cfg.work_dir(id)).await;
+
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(json!(job.view(0))))
+}
+
+pub async fn retry_summary(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
     let r = sqlx::query(
         "UPDATE jobs SET summary_status = 'pending', summary_error = NULL, attempts = 0, updated_at = now()
          WHERE id = $1 AND user_id = $2 AND status = 'done' AND summary_status IN ('failed', 'done')",
@@ -212,6 +418,175 @@ pub async fn retry_summary(State(st): State<AppState>, CurrentUser(u): CurrentUs
         return Err(AppError::Conflict("สรุปใหม่ได้เมื่อถอดเสียงเสร็จแล้วเท่านั้น".into()));
     }
     Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn clarifications(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let set: crate::clarify::ClarificationSet =
+        serde_json::from_value(job.clarifications.ok_or(AppError::NotFound)?)
+            .map_err(|e| AppError::Internal(e.into()))?;
+    let answers: crate::clarify::Answers = serde_json::from_value(
+        job.clarification_answers
+            .unwrap_or_else(|| json!({ "answers": [] })),
+    )
+    .map_err(|e| AppError::Internal(e.into()))?;
+    let (set, answers) = crate::clarify::coalesce(set, answers);
+    Ok(Json(json!({
+        "status": job.status,
+        "revision": job.transcript_revision,
+        "questions": set.questions,
+        "answers": answers,
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct ClarificationAnswersReq {
+    revision: i32,
+    #[serde(default)]
+    answers: Vec<crate::clarify::Answer>,
+}
+
+pub async fn save_clarification_answers(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<ClarificationAnswersReq>,
+) -> AppResult<Json<Value>> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if job.status != jobs::STATUS_AWAITING_CLARIFICATION || job.transcript_revision != req.revision
+    {
+        return Err(AppError::Conflict(
+            "ทรานสคริปต์หรือคำตอบถูกแก้จากอีกหน้าต่าง กรุณาโหลดข้อมูลล่าสุด".into(),
+        ));
+    }
+    let set: crate::clarify::ClarificationSet =
+        serde_json::from_value(job.clarifications.ok_or(AppError::NotFound)?)
+            .map_err(|e| AppError::Internal(e.into()))?;
+    let (set, answers) = crate::clarify::coalesce(
+        set,
+        crate::clarify::Answers {
+            answers: req.answers,
+        },
+    );
+    crate::clarify::validate_answers(&set, &answers)
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let value = serde_json::to_value(&answers).map_err(|e| AppError::Internal(e.into()))?;
+    let changed = sqlx::query(
+        "UPDATE jobs SET clarification_answers = $4, updated_at = now()
+         WHERE id = $1 AND user_id = $2 AND status = 'awaiting_clarification' AND transcript_revision = $3",
+    )
+    .bind(id)
+    .bind(u.id)
+    .bind(req.revision)
+    .bind(value)
+    .execute(&st.db)
+    .await?;
+    if changed.rows_affected() == 0 {
+        return Err(AppError::Conflict(
+            "ทรานสคริปต์หรือคำตอบถูกแก้จากอีกหน้าต่าง กรุณาโหลดข้อมูลล่าสุด".into(),
+        ));
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct CompleteClarificationsReq {
+    revision: i32,
+}
+
+pub async fn complete_clarifications(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<CompleteClarificationsReq>,
+) -> AppResult<Json<Value>> {
+    let mut tx = st.db.begin().await?;
+    let job = sqlx::query_as::<_, jobs::Job>(
+        "SELECT * FROM jobs WHERE id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(id)
+    .bind(u.id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    // Safe idempotency for a double click or a retried HTTP request.
+    if job.status != jobs::STATUS_AWAITING_CLARIFICATION {
+        let same_review = job
+            .clarifications
+            .as_ref()
+            .and_then(|v| v.get("base_revision"))
+            .and_then(Value::as_i64)
+            == Some(req.revision as i64)
+            && job.clarification_completed_at.is_some();
+        if same_review {
+            tx.rollback().await?;
+            return Ok(Json(json!({ "ok": true, "already_completed": true })));
+        }
+        return Err(AppError::Conflict("งานนี้ไม่ได้รอการตรวจทานแล้ว".into()));
+    }
+    if job.transcript_revision != req.revision {
+        return Err(AppError::Conflict(
+            "ทรานสคริปต์ถูกแก้จากอีกหน้าต่าง กรุณาโหลดข้อมูลล่าสุด".into(),
+        ));
+    }
+
+    let set: crate::clarify::ClarificationSet =
+        serde_json::from_value(job.clarifications.clone().ok_or(AppError::NotFound)?)
+            .map_err(|e| AppError::Internal(e.into()))?;
+    let answers: crate::clarify::Answers = serde_json::from_value(
+        job.clarification_answers
+            .clone()
+            .unwrap_or_else(|| json!({ "answers": [] })),
+    )
+    .map_err(|e| AppError::Internal(e.into()))?;
+    let (set, answers) = crate::clarify::coalesce(set, answers);
+    let mut segments: Vec<jobs::SegmentRow> = sqlx::query_as(
+        "SELECT start_sec, end_sec, speaker, text, tokens FROM segments WHERE job_id = $1 ORDER BY idx FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut speakers = job.speakers.0.clone();
+    let unresolved = crate::clarify::apply(&set, &answers, &mut segments, &mut speakers)
+        .map_err(|e| AppError::Conflict(e.to_string()))?;
+
+    for (idx, segment) in segments.iter().enumerate() {
+        sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2")
+            .bind(id)
+            .bind(idx as i32)
+            .bind(&segment.text)
+            .execute(&mut *tx)
+            .await?;
+    }
+    let changed = sqlx::query(
+        "UPDATE jobs SET speakers = $3, clarification_unresolved = $4, status = 'processing', stage = 2, stage_pct = 0,
+             summary_status = 'pending', summary_error = NULL, eta_sec = NULL, attempts = 0,
+             transcript_revision = transcript_revision + 1, clarification_completed_at = now(), updated_at = now()
+         WHERE id = $1 AND user_id = $2 AND status = 'awaiting_clarification' AND transcript_revision = $5",
+    )
+    .bind(id)
+    .bind(u.id)
+    .bind(sqlx::types::Json(&speakers))
+    .bind(serde_json::to_value(&unresolved).map_err(|e| AppError::Internal(e.into()))?)
+    .bind(req.revision)
+    .execute(&mut *tx)
+    .await?;
+    if changed.rows_affected() == 0 {
+        return Err(AppError::Conflict(
+            "ทรานสคริปต์ถูกแก้จากอีกหน้าต่าง กรุณาโหลดข้อมูลล่าสุด".into(),
+        ));
+    }
+    tx.commit().await?;
+    Ok(Json(json!({ "ok": true, "unresolved": unresolved.len() })))
 }
 
 #[derive(Deserialize)]
@@ -230,12 +605,19 @@ pub async fn rename_speaker(
         return Err(AppError::BadRequest("ชื่อผู้พูดต้องไม่ว่าง".into()));
     }
     let mut tx = st.db.begin().await?;
-    let job = sqlx::query_as::<_, jobs::Job>("SELECT * FROM jobs WHERE id = $1 AND user_id = $2 FOR UPDATE")
-        .bind(id)
-        .bind(u.id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let job = sqlx::query_as::<_, jobs::Job>(
+        "SELECT * FROM jobs WHERE id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(id)
+    .bind(u.id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    if job.status == jobs::STATUS_AWAITING_CLARIFICATION {
+        return Err(AppError::Conflict(
+            "กรุณายืนยันชื่อผู้พูดในขั้นตรวจทานก่อน หากยังไม่ทราบให้เลือก “ยังยืนยันไม่ได้”".into(),
+        ));
+    }
     let mut speakers = job.speakers.0;
     let sp = speakers.get_mut(idx).ok_or(AppError::NotFound)?;
     let old = std::mem::replace(&mut sp.name, name.clone());
@@ -252,18 +634,25 @@ pub async fn rename_speaker(
         for (i, text) in rows {
             replaced += text.matches(old.as_str()).count();
             let text = text.replace(old.as_str(), &name);
-            sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2").bind(id).bind(i).bind(&text).execute(&mut *tx).await?;
+            sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2")
+                .bind(id)
+                .bind(i)
+                .bind(&text)
+                .execute(&mut *tx)
+                .await?;
             changed.push(json!({ "idx": i, "text": text }));
         }
     }
-    sqlx::query("UPDATE jobs SET speakers = $2, updated_at = now() WHERE id = $1")
+    sqlx::query("UPDATE jobs SET speakers = $2, transcript_revision = transcript_revision + 1, updated_at = now() WHERE id = $1")
         .bind(id)
         .bind(sqlx::types::Json(&speakers))
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
     let stale = stale_now(&st, id, u.id).await?;
-    Ok(Json(json!({ "speakers": speakers, "replaced": replaced, "changed": changed, "summary_stale": stale })))
+    Ok(Json(
+        json!({ "speakers": speakers, "replaced": replaced, "changed": changed, "summary_stale": stale }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -284,34 +673,208 @@ pub async fn edit_segment(
         return Err(AppError::BadRequest("ข้อความต้องไม่ว่าง".into()));
     }
     if text.chars().count() > jobs::MAX_SEGMENT_CHARS {
-        return Err(AppError::BadRequest(format!("ข้อความยาวได้ไม่เกิน {} ตัวอักษร", jobs::MAX_SEGMENT_CHARS)));
+        return Err(AppError::BadRequest(format!(
+            "ข้อความยาวได้ไม่เกิน {} ตัวอักษร",
+            jobs::MAX_SEGMENT_CHARS
+        )));
     }
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if job.status == jobs::STATUS_AWAITING_CLARIFICATION {
+        return Err(AppError::Conflict(
+            "กรุณาตอบคำถามนี้ในขั้นตรวจทาน เพื่อให้ระบบแก้ไขแบบตรวจสอบตำแหน่งได้".into(),
+        ));
+    }
     if job.stage < jobs::STAGE_SUMMARY {
         return Err(AppError::Conflict("แก้ข้อความได้เมื่อถอดเสียงเสร็จแล้ว".into()));
     }
-    let r = sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2").bind(id).bind(idx).bind(&text).execute(&st.db).await?;
+    let r = sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2")
+        .bind(id)
+        .bind(idx)
+        .bind(&text)
+        .execute(&st.db)
+        .await?;
     if r.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
-    sqlx::query("UPDATE jobs SET updated_at = now() WHERE id = $1").bind(id).execute(&st.db).await?;
+    sqlx::query("UPDATE jobs SET transcript_revision = transcript_revision + 1, updated_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(&st.db)
+        .await?;
     let stale = stale_now(&st, id, u.id).await?;
     Ok(Json(json!({ "text": text, "summary_stale": stale })))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplaceScope {
+    One,
+    All,
+}
+
+#[derive(Deserialize)]
+pub struct ReplaceTranscriptReq {
+    search: String,
+    replacement: String,
+    scope: ReplaceScope,
+    /// Segment index and zero-based match within that segment; required for scope=one.
+    line: Option<i32>,
+    occurrence: Option<usize>,
+}
+
+fn replace_matches(
+    pattern: &regex::Regex,
+    text: &str,
+    replacement: &str,
+    occurrence: Option<usize>,
+) -> Option<(String, usize)> {
+    let found: Vec<_> = pattern.find_iter(text).map(|item| item.range()).collect();
+    let targets = match occurrence {
+        Some(index) => vec![found.get(index)?.clone()],
+        None if !found.is_empty() => found,
+        None => return None,
+    };
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for target in &targets {
+        output.push_str(&text[cursor..target.start]);
+        output.push_str(replacement);
+        cursor = target.end;
+    }
+    output.push_str(&text[cursor..]);
+    Some((output, targets.len()))
+}
+
+/// Case-insensitive, atomic transcript search/replace. A single replacement is addressed by its
+/// segment and match ordinal so repeated Thai text in the same line cannot replace the wrong hit.
+pub async fn replace_transcript(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<ReplaceTranscriptReq>,
+) -> AppResult<Json<Value>> {
+    let search = req.search.trim();
+    let replacement = req
+        .replacement
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if search.is_empty() || search.chars().count() > 200 {
+        return Err(AppError::BadRequest("คำค้นหาต้องมี 1–200 ตัวอักษร".into()));
+    }
+    if replacement.is_empty() || replacement.chars().count() > 200 {
+        return Err(AppError::BadRequest("ข้อความแทนที่ต้องมี 1–200 ตัวอักษร".into()));
+    }
+    if search == replacement {
+        return Err(AppError::BadRequest("คำค้นหาและข้อความแทนที่เหมือนกัน".into()));
+    }
+    let pattern = RegexBuilder::new(&regex::escape(search))
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| AppError::Internal(e.into()))?;
+    let selected = match req.scope {
+        ReplaceScope::One => Some((
+            req.line
+                .ok_or_else(|| AppError::BadRequest("ไม่ระบุตำแหน่งที่จะแทนที่".into()))?,
+            req.occurrence
+                .ok_or_else(|| AppError::BadRequest("ไม่ระบุตำแหน่งที่จะแทนที่".into()))?,
+        )),
+        ReplaceScope::All => None,
+    };
+
+    let mut tx = st.db.begin().await?;
+    let job = sqlx::query_as::<_, jobs::Job>(
+        "SELECT * FROM jobs WHERE id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(id)
+    .bind(u.id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    if job.status == jobs::STATUS_AWAITING_CLARIFICATION {
+        return Err(AppError::Conflict(
+            "กรุณาตรวจทานคำถามให้เสร็จก่อนค้นหาและแทนที่".into(),
+        ));
+    }
+    if job.stage < jobs::STAGE_SUMMARY {
+        return Err(AppError::Conflict("ค้นหาและแทนที่ได้เมื่อถอดเสียงเสร็จแล้ว".into()));
+    }
+
+    let rows: Vec<(i32, String)> =
+        sqlx::query_as("SELECT idx, text FROM segments WHERE job_id = $1 ORDER BY idx FOR UPDATE")
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+    let mut changed = Vec::new();
+    let mut replaced = 0;
+    for (line, text) in rows {
+        if selected.is_some_and(|(wanted, _)| wanted != line) {
+            continue;
+        }
+        let occurrence = selected.map(|(_, occurrence)| occurrence);
+        let Some((next, count)) = replace_matches(&pattern, &text, &replacement, occurrence) else {
+            continue;
+        };
+        if next.chars().count() > jobs::MAX_SEGMENT_CHARS {
+            return Err(AppError::BadRequest(format!(
+                "ข้อความหลังแทนที่ยาวเกิน {} ตัวอักษร",
+                jobs::MAX_SEGMENT_CHARS
+            )));
+        }
+        sqlx::query("UPDATE segments SET text = $3 WHERE job_id = $1 AND idx = $2")
+            .bind(id)
+            .bind(line)
+            .bind(&next)
+            .execute(&mut *tx)
+            .await?;
+        changed.push(json!({ "idx": line, "text": next }));
+        replaced += count;
+    }
+    if replaced == 0 {
+        return Err(AppError::Conflict("ไม่พบคำนี้แล้ว กรุณาค้นหาใหม่".into()));
+    }
+    sqlx::query(
+        "UPDATE jobs SET transcript_revision = transcript_revision + 1, updated_at = now() WHERE id = $1",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    let stale = stale_now(&st, id, u.id).await?;
+    Ok(Json(json!({
+        "changed": changed,
+        "replaced": replaced,
+        "summary_stale": stale,
+    })))
+}
+
 async fn stale_now(st: &AppState, id: Uuid, user_id: Uuid) -> AppResult<bool> {
-    let job = jobs::get_owned(&st.db, id, user_id).await?.ok_or(AppError::NotFound)?;
+    let job = jobs::get_owned(&st.db, id, user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let segments = jobs::segments(&st.db, id).await?;
     Ok(jobs::summary_stale(&job, &segments))
 }
 
 /// Streams an object from storage with HTTP range support, so the browser can seek in a 2 GB video without
 /// downloading it: HEAD, `Accept-Ranges`, 206 + `Content-Range`, 416 for a range outside the file, `If-Range`.
-async fn serve(st: &AppState, key: &str, headers: &HeaderMap, content_type: &str) -> AppResult<Response> {
-    let mut range = headers.get(header::RANGE).and_then(|v| v.to_str().ok()).filter(|r| r.starts_with("bytes=") && !r.contains(','));
+async fn serve(
+    st: &AppState,
+    key: &str,
+    headers: &HeaderMap,
+    content_type: &str,
+) -> AppResult<Response> {
+    let mut range = headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .filter(|r| r.starts_with("bytes=") && !r.contains(','));
     // A client resuming with If-Range wants the range only if the file is unchanged; without an ETag to compare we
     // can't tell, so fetch first and fall back to the whole file on mismatch.
-    let if_range = headers.get(header::IF_RANGE).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let if_range = headers
+        .get(header::IF_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let mut got = st.storage.get(key, range).await?;
     if let (Some(want), Get::Found(f)) = (&if_range, &got)
         && range.is_some()
@@ -325,25 +888,57 @@ async fn serve(st: &AppState, key: &str, headers: &HeaderMap, content_type: &str
         Get::NotFound => Err(AppError::NotFound),
         Get::BadRange { total } => Ok((
             StatusCode::RANGE_NOT_SATISFIABLE,
-            [(header::CONTENT_RANGE, format!("bytes */{}", total.unwrap_or(0))), (header::ACCEPT_RANGES, "bytes".to_string())],
+            [
+                (
+                    header::CONTENT_RANGE,
+                    format!("bytes */{}", total.unwrap_or(0)),
+                ),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+            ],
         )
             .into_response()),
         Get::Found(f) => {
             let partial = range.is_some() && f.content_range.is_some();
-            let mut resp = Response::new(Body::from_stream(ReaderStream::new(f.body.into_async_read())));
-            *resp.status_mut() = if partial { StatusCode::PARTIAL_CONTENT } else { StatusCode::OK };
+            let mut resp = Response::new(Body::from_stream(ReaderStream::new(
+                f.body.into_async_read(),
+            )));
+            *resp.status_mut() = if partial {
+                StatusCode::PARTIAL_CONTENT
+            } else {
+                StatusCode::OK
+            };
             let h = resp.headers_mut();
-            h.insert(header::CONTENT_TYPE, HeaderValue::from_str(content_type).unwrap_or(HeaderValue::from_static("application/octet-stream")));
+            h.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(content_type)
+                    .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+            );
             h.insert(header::CONTENT_LENGTH, HeaderValue::from(f.len));
             h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-            h.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=3600"));
-            if partial && let Some(v) = f.content_range.as_deref().and_then(|v| HeaderValue::from_str(v).ok()) {
+            h.insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("private, max-age=3600"),
+            );
+            if partial
+                && let Some(v) = f
+                    .content_range
+                    .as_deref()
+                    .and_then(|v| HeaderValue::from_str(v).ok())
+            {
                 h.insert(header::CONTENT_RANGE, v);
             }
-            if let Some(v) = f.etag.as_deref().and_then(|v| HeaderValue::from_str(v).ok()) {
+            if let Some(v) = f
+                .etag
+                .as_deref()
+                .and_then(|v| HeaderValue::from_str(v).ok())
+            {
                 h.insert(header::ETAG, v);
             }
-            if let Some(v) = f.last_modified.as_deref().and_then(|v| HeaderValue::from_str(v).ok()) {
+            if let Some(v) = f
+                .last_modified
+                .as_deref()
+                .and_then(|v| HeaderValue::from_str(v).ok())
+            {
                 h.insert(header::LAST_MODIFIED, v);
             }
             Ok(resp)
@@ -351,38 +946,113 @@ async fn serve(st: &AppState, key: &str, headers: &HeaderMap, content_type: &str
     }
 }
 
-pub async fn media(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>, headers: HeaderMap) -> AppResult<Response> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
-    serve(&st, &storage::source_key(id, &job.source_ext), &headers, storage::content_type(&job.source_ext)).await
+pub async fn media(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> AppResult<Response> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    serve(
+        &st,
+        &storage::source_key(id, &job.source_ext),
+        &headers,
+        storage::content_type(&job.source_ext),
+    )
+    .await
 }
 
-pub async fn audio(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>, headers: HeaderMap) -> AppResult<Response> {
-    jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
-    serve(&st, &storage::key(id, storage::AUDIO), &headers, "audio/wav").await
+pub async fn audio(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> AppResult<Response> {
+    jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    serve(
+        &st,
+        &storage::key(id, storage::AUDIO),
+        &headers,
+        "audio/wav",
+    )
+    .await
 }
 
-pub async fn thumbnail(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>, headers: HeaderMap) -> AppResult<Response> {
-    jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
-    serve(&st, &storage::key(id, storage::THUMB), &headers, "image/jpeg").await
+pub async fn thumbnail(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> AppResult<Response> {
+    jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    serve(
+        &st,
+        &storage::key(id, storage::THUMB),
+        &headers,
+        "image/jpeg",
+    )
+    .await
 }
 
 /// Plain-text log of the correction step: applied edits, names waiting for a person to confirm, unclear spans.
-pub async fn changes_txt(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Response> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
-    let (text,): (Option<String>,) = sqlx::query_as("SELECT changes_text FROM jobs WHERE id = $1").bind(id).fetch_one(&st.db).await?;
+pub async fn changes_txt(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Response> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let (text,): (Option<String>,) = sqlx::query_as("SELECT changes_text FROM jobs WHERE id = $1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await?;
     let text = text.ok_or(AppError::NotFound)?;
     Ok(text_download(&job.name, "บันทึกการตรวจแก้", text))
 }
 
 fn text_download(job_name: &str, what: &str, text: String) -> Response {
-    let base: String = job_name.rsplit_once('.').map(|(b, _)| b.to_string()).unwrap_or(job_name.to_string());
+    let base: String = job_name
+        .rsplit_once('.')
+        .map(|(b, _)| b.to_string())
+        .unwrap_or(job_name.to_string());
     let filename = format!("{base} - {what}.txt");
-    let disposition = format!("attachment; filename=\"{}.txt\"; filename*=UTF-8''{}", if what == "สรุปการประชุม" { "summary" } else { "changes" }, urlencode(&filename));
-    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8".to_string()), (header::CONTENT_DISPOSITION, disposition)], text).into_response()
+    let disposition = format!(
+        "attachment; filename=\"{}.txt\"; filename*=UTF-8''{}",
+        if what == "สรุปการประชุม" {
+            "summary"
+        } else {
+            "changes"
+        },
+        urlencode(&filename)
+    );
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                "text/plain; charset=utf-8".to_string(),
+            ),
+            (header::CONTENT_DISPOSITION, disposition),
+        ],
+        text,
+    )
+        .into_response()
 }
 
-pub async fn summary_txt(State(st): State<AppState>, CurrentUser(u): CurrentUser, Path(id): Path<Uuid>) -> AppResult<Response> {
-    let job = jobs::get_owned(&st.db, id, u.id).await?.ok_or(AppError::NotFound)?;
+pub async fn summary_txt(
+    State(st): State<AppState>,
+    CurrentUser(u): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Response> {
+    let job = jobs::get_owned(&st.db, id, u.id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let text = job.summary_text.ok_or(AppError::NotFound)?;
     Ok(text_download(&job.name, "สรุปการประชุม", text))
 }
@@ -390,8 +1060,32 @@ pub async fn summary_txt(State(st): State<AppState>, CurrentUser(u): CurrentUser
 fn urlencode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transcript_replace_can_change_one_match_or_all_matches() {
+        let pattern = RegexBuilder::new(&regex::escape("ธานิน"))
+            .case_insensitive(true)
+            .build()
+            .unwrap();
+        let text = "คุณธานินพูด แล้วธานินตอบ";
+        assert_eq!(
+            replace_matches(&pattern, text, "ธานินทร์", Some(1)),
+            Some(("คุณธานินพูด แล้วธานินทร์ตอบ".into(), 1))
+        );
+        assert_eq!(
+            replace_matches(&pattern, text, "ธานินทร์", None),
+            Some(("คุณธานินทร์พูด แล้วธานินทร์ตอบ".into(), 2))
+        );
+    }
 }

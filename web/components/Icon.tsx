@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { ICONS } from "@/lib/icons";
 
 export function Icon({ name, className = "" }: { name: string; className?: string }) {
@@ -11,15 +12,8 @@ export function Icon({ name, className = "" }: { name: string; className?: strin
   );
 }
 
+/** App icon beside the "Transcripto" wordmark; decorative because the link text already names the app.
+    Same artwork as app/icon.png and app/favicon.ico. */
 export function BrandMark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32">
-        <rect x="6.5" y="12.5" width="3" height="7" rx="1.5" fill="#46D1C0" />
-        <rect x="12" y="7" width="3" height="18" rx="1.5" fill="#A6A9FF" />
-        <rect x="17.5" y="10" width="3" height="12" rx="1.5" fill="#FF9C82" />
-        <rect x="23" y="13.5" width="3" height="5" rx="1.5" fill="#F2C45C" />
-      </svg>
-    </span>
-  );
+  return <Image className="brand-mark" src="/transcripto-icon.png" alt="" width={32} height={32} unoptimized loading="eager" />;
 }

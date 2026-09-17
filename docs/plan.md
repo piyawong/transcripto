@@ -95,3 +95,15 @@ Keyterms/glossary: ตั้งค่าแยกตามผู้ใช้ใ�
 - `PATCH /api/jobs/{id}/speakers/{idx}` — เปลี่ยนชื่อแล้วแทนชื่อเดิมในข้อความทุกบรรทัดใน transaction เดียว (ยกเว้นชื่อเดิมหรือชื่อใหม่เป็นป้าย "ผู้พูด N") ตอบ `replaced` และ `changed: [{idx, text}]`; หน้าเว็บมีเลิกทำ = เปลี่ยนกลับ
 - ตอนสรุปเก็บ `summary_meta.transcript_hash` = sha256 ของข้อความที่ส่งให้ Gemini; `GET /api/jobs/{id}` ตอบ `summary_stale` เมื่อ hash ไม่ตรงข้อความปัจจุบัน → กล่องสรุปขึ้นป้ายพร้อมปุ่ม "สรุปใหม่จากข้อความที่แก้" (ใช้ `POST /summary/retry` เดิม)
 - หน้าเว็บ: ดินสอท้ายบรรทัด (โผล่ตอน hover/focus, เห็นตลอดบนจอสัมผัส) → textarea, Enter บันทึก, Esc ยกเลิก, focus กลับที่ดินสอ, หยุดวิดีโอและหยุดเลื่อนตามวิดีโอระหว่างแก้
+
+## ภาพเคลื่อนไหวขั้นตอนการทำงานในหน้า login (15 ก.ย. 2026)
+
+ที่มา: `animation/a-clay.html` (Clay Buddies) ซึ่งเล่นตาม scroll → ย้ายมาเล่นเองวนลูปฝั่งซ้ายของหน้า login แทนตัวอย่างทรานสคริปต์เดิม (`.demo`)
+
+- `web/components/ProcessScene.tsx` — ฉากเป็น JSX ทั้งหมด (ตัวละคร Mochi อย่างเดียว, คลื่นเสียง 45 แท่ง, คำใน bubble เป็น span) ไม่เขียน DOM เพิ่มใน effect
+- GSAP core (`gsap` 3.15.0) timeline เดียว `repeat: -1`: 0 อัปโหลดเสียง → 2.5 แยกผู้พูด → 5 ถอดเสียง → 8.5 สรุปประชุม → ค้างผลสรุป → จางออกแล้วเริ่มใหม่; chip ขั้นตอน ไฮไลต์คำ เปลี่ยนชื่อ "ผู้พูด 3" และพิมพ์หัวข้อสรุป คำนวณจาก `tl.time()` + ค่าคงที่ (ไม่อ่านข้อความคืนจาก DOM → ทน StrictMode)
+- `gsap.matchMedia` scope ที่ root: สร้างเฉพาะจอ > 860px (จอเล็กซ่อนฉากเหมือน `.demo` เดิม), `prefers-reduced-motion` → ข้ามไปเฟรมสรุปนิ่ง ไม่เล่น; ก่อน timeline พร้อมซ่อนเนื้อหาในฉาก (`data-live`) กันภาพซ้อนตอนโหลด
+- ปุ่มหยุด/เล่น (WCAG 2.2.2) หยุดทั้ง timeline และ CSS animation ในฉาก; ไม่แตะ animation โลโก้เดิม
+- CSS แบบ global ไฟล์ `web/app/process-scene.css` prefix `ps-`/`bd-` ใต้ `.ps` ทุกตัว (keyframes `ps-*`) เพราะ `.steps`, `@keyframes blink` ฯลฯ มีอยู่แล้วใน prototype.css; สีผู้พูด/ฟอนต์ใช้ token ธีม Minimal
+- ขนาด: ฉากคงสัดส่วน 820:640 อยู่ในกรอบ `flex: 1` + `container-type: size` → กว้าง `min(100cqw, 100cqh × 820/640)` ลูกใช้ `cqw`; ลด padding/gap ของ stage และขนาด pitch บนจอเตี้ยให้ฉากยังอ่านได้ที่ 1280×720; ไฟล์เริ่มตกจากขอบบนของฉาก (ไม่ทับข้อความด้านบน)
+- ตรวจ: lint, tsc, build, และเปิดจริงใน `next dev` (StrictMode) ที่ 1440×900 / 1280×720 / ≤860px

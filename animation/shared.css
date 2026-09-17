@@ -1,0 +1,52 @@
+/* Transcripto scene prototypes — shared stage, copy and tokens (Ocean Light brand). */
+:root {
+  --navy: #0a1133; --navy-2: #16215a; --blue: #0b5cff; --blue-6: #0754e6; --cyan: #22c3f3; --cyan-2: #8fd8f7;
+  --ice: #eaf4fd; --paper: #f6f9fc; --line: #dce5ef; --muted: #56627f; --text-2: #3a4666;
+  --s1: #0b5cff; --s2: #0ea5a4; --s3: #8a4fff;
+  --font-d: "Plus Jakarta Sans", "IBM Plex Sans Thai", system-ui, sans-serif;
+  --font-b: "IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: var(--paper);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: var(--font-b); line-height: 1.6; color: var(--navy); background: var(--bg); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+a { color: inherit; }
+.icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.proto-bar { position: fixed; top: 12px; left: 12px; right: 12px; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none; }
+.proto-bar > * { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border-radius: 999px; background: rgb(10 17 51 / 0.88); color: #fff; font: 600 13px/1.2 var(--font-b); text-decoration: none; }
+
+.story { position: relative; height: 700svh; }
+.stage { position: sticky; top: 0; height: 100svh; overflow: hidden; display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); align-items: center; gap: clamp(24px, 4vw, 64px); padding: 72px clamp(20px, 4.5vw, 72px) 32px; background: var(--bg); isolation: isolate; }
+.copy { position: relative; z-index: 3; display: grid; gap: 16px; max-width: 480px; }
+.kicker { display: flex; align-items: center; gap: 10px; font-family: var(--font-d); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; }
+.kicker span { padding: 4px 12px; border-radius: 99px; background: var(--ice); color: var(--blue-6); letter-spacing: 0; font-family: var(--font-b); }
+.title { font-family: var(--font-d); font-size: clamp(2rem, 0.6rem + 3.2vw, 3.4rem); font-weight: 700; line-height: 1.25; text-wrap: balance; }
+.lead { font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem); line-height: 1.75; color: var(--text-2); max-width: 42ch; }
+.steps { display: flex; flex-wrap: wrap; gap: 8px; }
+.steps li { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 99px; background: #fff; border: 1px solid var(--line); font-size: 0.9375rem; font-weight: 500; transition: background-color 240ms, color 240ms, border-color 240ms; }
+.steps b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 99px; background: var(--ice); font-family: var(--font-d); font-size: 0.75rem; }
+.steps li.is-on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.steps li.is-on b { background: var(--blue); color: #fff; }
+.steps li.is-done b { background: #d7f5e6; color: #0f7a4a; }
+
+.art { position: relative; width: 100%; max-width: 820px; aspect-ratio: 820 / 640; justify-self: center; container-type: inline-size; }
+.art > * { position: absolute; }
+.after { display: grid; place-items: center; min-height: 70svh; padding: 48px 20px; background: var(--navy); color: #b9c8ea; text-align: center; }
+
+@media (max-width: 767px) {
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-content: start; gap: 10px; padding: 64px 16px 16px; }
+  .copy { gap: 8px; }
+  .title { font-size: clamp(1.625rem, 7vw, 2rem); }
+  .lead { display: none; }
+  .steps { gap: 6px; }
+  .steps li { padding: 3px 10px 3px 3px; font-size: 0.75rem; gap: 5px; }
+  .steps b { width: 20px; height: 20px; font-size: 0.625rem; }
+  .art { aspect-ratio: auto; height: 100%; max-height: 600px; align-self: center; }
+  .story { height: 620svh; }
+}
+.static .story { height: auto; }
+.static .stage { position: relative; height: auto; min-height: 100svh; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

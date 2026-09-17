@@ -41,6 +41,24 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 /* transcript: edit a line (pencil beside the seek button; the line becomes a text box) */
 .tx-head .sec-title { flex-wrap: wrap; row-gap: 2px; }
 .tx-head .sec-title h2 { white-space: nowrap; }
+.tx-find { min-width: 0; flex: 1; display: flex; align-items: center; gap: 5px; }
+.tx-find .search { min-width: 140px; }
+.tx-hit-count { min-width: 42px; color: var(--ink-2); font: 500 12px/1 var(--font-mono); text-align: center; }
+.tx-hit-nav { width: 34px; height: 34px; flex: 0 0 auto; }
+.tx-hit-nav.next svg.i { transform: rotate(180deg); }
+.tx-hit-nav:disabled { opacity: .38; cursor: default; }
+.tx-replace { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.tx-replace label { min-width: 150px; flex: 1; }
+.tx-replace input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--r-input); background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
+.tx-replace input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 22%, transparent); }
+.tx mark.current { background: color-mix(in oklab, var(--warn) 68%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--warn) 78%, var(--ink)); }
+.tx .seg.search-current { background: color-mix(in oklab, var(--warn) 9%, var(--surface)); }
+@media (max-width: 560px) {
+  .tx-tools { align-items: stretch; }
+  .tx-find { flex-basis: 100%; }
+  .tx-tools .follow { margin-left: auto; }
+  .tx-replace .btn { flex: 1; }
+}
 .tx li.can-edit { position: relative; }
 .tx li.can-edit .seg { padding-right: 44px; }
 .seg-edit { position: absolute; top: 4px; right: 2px; width: 36px; height: 36px; opacity: 0; transition: opacity .15s, background-color .15s, color .15s; }
@@ -90,6 +108,8 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 .kind-advice { color: var(--brand); }
 .kind-discussion { color: var(--spk-3); }
 .sum-when { font-size: 13px; color: var(--ink-3); }
+.sum-report-section { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 14.5px; line-height: 1.7; }
+.sum-report-section h5 { margin: 0; font-size: 14.5px; font-weight: 600; }
 .sum-points { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; line-height: 1.7; }
 .sum-quotes { display: flex; flex-direction: column; gap: 6px; }
 .sum-quotes blockquote { margin: 0; padding: 6px 0 6px 12px; border-left: 2px solid var(--brand); font-size: 14.5px; line-height: 1.65; color: var(--ink); }
@@ -132,6 +152,14 @@ html[data-style="minimal"] .stage { background: #0B1220; }
 
 /* upload: the whole drop area opens the file picker */
 .drop { cursor: pointer; }
+/* …or a link the server downloads (download.rs) */
+.drop-url { display: flex; gap: 8px; max-width: 620px; cursor: default; }
+.drop-url-field { flex: 1; }
+.drop-url .btn { min-height: 40px; padding: 0 14px; font-size: 14.5px; }
+@media (max-width: 560px) {
+  .drop-url { flex-wrap: wrap; }
+  .drop-url .btn { flex: 1; }
+}
 button.link { border: 0; background: none; padding: 0; font: inherit; font-weight: 500; cursor: pointer; }
 
 /* library: search by file name or spoken words, date range, sort, status */

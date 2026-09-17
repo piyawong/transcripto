@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { DEMO_VIDEO, login, row, SAMPLES, watchErrors } from "./helpers";
+import { DEMO_VIDEO, finishProcessing, login, row, SAMPLES, watchErrors } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -12,9 +12,9 @@ test("upload a video, watch it process, then use player, transcript, summary and
   const name = path.basename(DEMO_VIDEO);
   const before = await page.getByTestId("job-row").filter({ hasText: name }).count();
 
-  // ---- the upload area has no options: clicking anywhere in it opens the file picker
+  // ---- the upload area has no options: clicking anywhere in it (except the link form, see link.spec.ts) opens the file picker
   await expect(page.getByTestId("drop").locator("select")).toHaveCount(0);
-  await expect(page.getByTestId("drop").getByRole("button")).toHaveText(["เลือกไฟล์วิดีโอ"]);
+  await expect(page.getByTestId("drop").getByRole("button")).toHaveText(["ดึงวิดีโอจากลิงก์", "เลือกไฟล์วิดีโอ"]);
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("drop").locator(".drop-title").click()]);
   await chooser.setFiles(DEMO_VIDEO);
   const r = page.getByTestId("job-row").filter({ hasText: name }).first();
@@ -36,7 +36,7 @@ test("upload a video, watch it process, then use player, transcript, summary and
 
   // ---- wait for transcript + summary (real ElevenLabs + Gemini: minutes; fixture mode: seconds)
   const started = Date.now();
-  await expect(page.getByTestId("job-status")).toContainText("ถอดเสียงเสร็จแล้ว", { timeout: info.timeout - 60_000 });
+  await finishProcessing(page, info.timeout - 60_000);
   info.annotations.push({ type: "processing-seconds", description: String(Math.round((Date.now() - started) / 1000)) });
 
   const lines = page.getByTestId("transcript").locator(".seg");
@@ -69,6 +69,7 @@ test("upload a video, watch it process, then use player, transcript, summary and
   // follow-along: one word is marked as being said, in the caption and in the transcript, and it moves on
   const caption = page.getByTestId("caption");
   await expect(caption.locator(".kw-now")).toBeVisible();
+  await expect(caption.locator(".kw-now")).not.toHaveText(/^\s*$/);
   await expect(page.getByTestId("transcript").locator(".seg.on .kw-now")).toBeVisible();
   const saidBefore = await caption.locator(".kw-said").count();
   await expect.poll(() => caption.locator(".kw-said").count(), { timeout: 10_000 }).toBeGreaterThan(saidBefore);
@@ -137,7 +138,7 @@ test("upload a video, watch it process, then use player, transcript, summary and
 
   // ---- transcript download (.txt and .csv)
   await page.getByTestId("btn-download").click();
-  const dlg = page.locator("dialog.dlg");
+  const dlg = page.getByRole("dialog", { name: "ดาวน์โหลดทรานสคริปต์" });
   await expect(dlg).toBeVisible();
   await expect(dlg.locator("#dlg-prev")).toHaveValue(new RegExp(newName));
   const [txt] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dlg-go").click()]);
@@ -170,13 +171,14 @@ test("upload a video, watch it process, then use player, transcript, summary and
   expect(box.height).toBeLessThan(box.viewport / 2);
   await page.screenshot({ path: info.outputPath("job-done.png") });
   await expect(summary.locator(".sum-title")).not.toBeEmpty();
-  await expect(summary.getByText("ลำดับการประชุม")).toBeVisible();
-  await expect(summary.getByText("ข้อสั่งการ / สิ่งที่ต้องดำเนินการ")).toBeVisible();
+  await expect(summary.getByText(/ข้อชี้แนะจาก/).first()).toBeVisible();
+  await expect(summary.getByText(/สรุปงานที่.*มอบหมาย/)).toBeVisible();
   const [sumDl] = await Promise.all([page.waitForEvent("download"), summary.getByRole("button", { name: "ดาวน์โหลด .txt" }).click()]);
   const sumPath = info.outputPath("summary.txt");
   await sumDl.saveAs(sumPath);
   const sumBody = fs.readFileSync(sumPath, "utf8");
-  expect(sumBody).toContain("ลำดับการประชุม");
+  expect(sumBody).toMatch(/ข้อชี้แนะจาก/);
+  expect(sumBody).toMatch(/สรุปงานที่.*มอบหมาย/);
   expect(sumBody).not.toMatch(/\*\*|^#/m); // plain text, not Markdown
   // the same file from the page header button
   const [headDl] = await Promise.all([page.waitForEvent("download"), page.getByTestId("btn-download-summary").click()]);
@@ -204,7 +206,14 @@ test("upload a video, watch it process, then use player, transcript, summary and
   await page.getByRole("link", { name: "งานถอดเสียงทั้งหมด" }).click();
   const doneRow = page.locator(`#row-${jobUrl.split("/").pop()}`);
   await expect(doneRow.locator(".pill")).toContainText("เสร็จแล้ว");
+  await expect(doneRow.getByRole("button", { name: "ถอดเสียงใหม่" })).toBeVisible();
   await expect(doneRow.getByRole("button", { name: /ดาวน์โหลดทรานสคริปต์/ })).toBeEnabled();
+  const rowLayout = await doneRow.evaluate((element) => {
+    const pipe = element.querySelector(".pipe")!.getBoundingClientRect();
+    const actions = Array.from(element.querySelectorAll<HTMLElement>(".job-actions > *")).map((item) => item.getBoundingClientRect());
+    return { pipeRight: pipe.right, actionLeft: Math.min(...actions.map((item) => item.left)) };
+  });
+  expect(rowLayout.pipeRight).toBeLessThan(rowLayout.actionLeft); // progress bar never runs underneath action buttons
   await page.getByRole("button", { name: /เสร็จแล้ว/ }).click();
   await expect(row(page, name)).toBeVisible();
 

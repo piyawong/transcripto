@@ -236,6 +236,8 @@ pub async fn correct(ai: &Ai, lines: &[Line], glossary: &[String], source_name: 
     };
 
     let mut fixed = text.clone();
+    // Gemini Pro is the final proofreader. Apply every safe suggestion, including names and
+    // English spelling, without pausing the pipeline for a separate human-review gate.
     let results = correct::apply_edits(&mut fixed, &merged.edits);
     let leftovers = correct::leftover_numbers(&fixed);
     let changes_text = correct::render_changes(source_name, model, &merged.edits, &results, &merged, &leftovers);
@@ -245,7 +247,6 @@ pub async fn correct(ai: &Ai, lines: &[Line], glossary: &[String], source_name: 
     }
 
     let applied = |k: correct::EditKind| merged.edits.iter().zip(&results).filter(|(e, r)| r.is_none() && e.kind == k).count();
-    let to_confirm = results.iter().filter(|r| r.as_deref() == Some(correct::NEEDS_CONFIRMATION)).count();
     let meta = json!({
         "model_id": model,
         "calls": calls,
@@ -258,8 +259,9 @@ pub async fn correct(ai: &Ai, lines: &[Line], glossary: &[String], source_name: 
         "edits_proposed": merged.edits.len(),
         "applied_correction": applied(correct::EditKind::Correction),
         "applied_number": applied(correct::EditKind::Number),
-        "names_to_confirm": to_confirm,
-        "rejected": results.iter().filter(|r| r.is_some()).count() - to_confirm,
+        "applied_name": applied(correct::EditKind::Name),
+        "names_to_confirm": 0,
+        "rejected": results.iter().filter(|r| r.is_some()).count(),
         "unclear": merged.unclear.len(),
         "leftover_numbers": leftovers.len(),
         "speaker_conflicts": conflicts.len(),
@@ -283,7 +285,7 @@ pub struct SummaryOutput {
     pub meta: Value,
 }
 
-/// One request for the whole transcript (README 6.4 v1): an answer cut off at MAX_TOKENS is an error, never used.
+/// Read the full meeting first; long meetings then re-read each section to retain report detail.
 pub async fn summarize(ai: &Ai, transcript_text: &str, source_name: &str) -> Result<SummaryOutput> {
     let started = Instant::now();
     let (minutes, model, finish, usage) = match ai {
@@ -296,11 +298,42 @@ pub async fn summarize(ai: &Ai, transcript_text: &str, source_name: &str) -> Res
             let g = gemini.generate(summary_model, &minutes::request_body(transcript_text)).await.context("Gemini summary")?;
             match g.finish_reason.as_deref() {
                 Some("STOP") => {}
-                Some("MAX_TOKENS") => bail!("USER: การประชุมนี้ยาวเกินกว่าจะสรุปได้ในครั้งเดียว (ยังไม่รองรับการสรุปทีละช่วง)"),
+                Some("MAX_TOKENS") => bail!("USER: การอ่านภาพรวมประชุมถูกตัดก่อนครบ จึงยังไม่บันทึกสรุป กรุณาลองสรุปใหม่"),
                 other => bail!("Gemini summary stopped early ({})", other.unwrap_or("no finish reason")),
             }
-            let m: MeetingMinutes = g.json().context("Gemini summary")?;
-            (m, summary_model.as_str(), g.finish_reason.clone(), g.usage)
+            let mut m: MeetingMinutes = g.json().context("Gemini summary")?;
+            let mut usage = g.usage.clone();
+            if minutes::expand_sections(transcript_text) {
+                let inputs: Vec<String> = (0..m.segments.len())
+                    .map(|i| minutes::section_input(transcript_text, &m.segments, i))
+                    .collect::<Result<_>>()?;
+                let requests: Vec<_> = inputs.into_iter().enumerate().map(|(index, input)| {
+                    let gemini = gemini.clone();
+                    let model = summary_model.clone();
+                    let kind = m.segments[index].kind;
+                    async move {
+                        tracing::info!("expanding summary section {}", index + 1);
+                        let result = gemini.generate(&model, &minutes::expansion_request(&input, kind)).await?;
+                        if result.finish_reason.as_deref() != Some("STOP") {
+                            bail!("Gemini summary section {} stopped early; incomplete summary was not saved", index + 1);
+                        }
+                        let section: minutes::ExpandedSection = result.json().context("expanded summary section")?;
+                        anyhow::ensure!(section.segment.kind == kind, "expanded section changed the meeting structure");
+                        Ok::<_, anyhow::Error>((section, result.usage))
+                    }
+                }).collect();
+                let expanded = futures::stream::iter(requests).buffered(3).collect::<Vec<_>>().await;
+                for (index, result) in expanded.into_iter().enumerate() {
+                    let (mut expanded, part_usage) = result?;
+                    usage.add(&part_usage);
+                    // The full-file reading owns boundaries; expansion cannot move or reorder sections.
+                    expanded.segment.start = m.segments[index].start.clone();
+                    expanded.segment.end = m.segments[index].end.clone();
+                    m.segments[index] = expanded.segment;
+                    m.needs_confirmation.extend(expanded.needs_confirmation);
+                }
+            }
+            (m, summary_model.as_str(), g.finish_reason.clone(), usage)
         }
     };
     let checks = minutes::check(&minutes, transcript_text);
@@ -313,7 +346,8 @@ pub async fn summarize(ai: &Ai, transcript_text: &str, source_name: &str) -> Res
         "tokens_thinking": usage.tokens_thinking,
         "cost_usd": gemini::cost_usd(model, &usage),
         "elapsed_seconds": round1(started.elapsed().as_secs_f64()),
-        "detail_points": minutes.segments.iter().map(|s| s.details.len()).sum::<usize>(),
+        "detail_points": minutes.segments.iter().map(|s| s.details.len() + s.report_sections.iter().map(|r| r.paragraphs.len() + r.items.len()).sum::<usize>()).sum::<usize>(),
+        "format_version": 2,
         "checks": checks,
     });
     Ok(SummaryOutput { minutes, text, checks, meta })
@@ -346,6 +380,6 @@ mod tests {
         assert!(out.changes_text.starts_with("ผลตรวจแก้ข้อความ demo.mp4 ด้วย fixture\n"));
         let text = transcript::transcript_for_summary(&out.segments, &out.speakers);
         let s = summarize(&ai, &text, "demo.mp4").await.unwrap();
-        assert!(s.text.contains("สรุปอัตโนมัติด้วย fixture จาก demo.mp4"));
+        assert!(s.text.contains("ข้อชี้แนะจาก"));
     }
 }

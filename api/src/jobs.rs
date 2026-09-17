@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 pub const STATUS_UPLOADING: &str = "uploading";
 pub const STATUS_PROCESSING: &str = "processing";
+pub const STATUS_AWAITING_CLARIFICATION: &str = "awaiting_clarification";
 pub const STATUS_DONE: &str = "done";
 pub const STATUS_FAILED: &str = "failed";
 
@@ -40,6 +41,17 @@ pub struct Job {
     pub summary_error: Option<String>,
     /// Keyterms copied from the owner's settings when the job was created.
     pub keyterms: Option<Vec<String>>,
+    /// The link a job was created from (download.rs); None for uploaded files.
+    pub source_url: Option<String>,
+    /// The worker still has to download the file from `source_url`; the job is 'processing' meanwhile.
+    pub downloading: bool,
+    /// Human-verification state between correction and summary.
+    pub clarifications: Option<Value>,
+    pub clarification_answers: Option<Value>,
+    pub clarification_unresolved: Value,
+    pub transcript_revision: i32,
+    pub summary_revision: Option<i32>,
+    pub clarification_completed_at: Option<DateTime<Utc>>,
     pub attempts: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -66,6 +78,9 @@ pub struct SegmentRow {
     pub end_sec: f64,
     pub speaker: i32,
     pub text: String,
+    /// Original speech-to-text pieces with absolute media timestamps. Null on jobs made before migration 0007.
+    #[serde(skip_serializing)]
+    pub tokens: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,6 +100,10 @@ pub struct JobView {
     pub segment_count: i64,
     pub summary_status: String,
     pub summary_error: Option<String>,
+    pub downloading: bool,
+    pub clarification_count: usize,
+    /// Site of the link the job was created from (the full link can carry access tokens, so it isn't sent).
+    pub source_host: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
@@ -112,16 +131,31 @@ pub const MAX_SEGMENT_CHARS: usize = 2000;
 pub fn summary_input(segments: &[SegmentRow], speakers: &[SpeakerView]) -> String {
     let segs: Vec<crate::transcript::Segment> = segments
         .iter()
-        .map(|s| crate::transcript::Segment { start: s.start_sec, end: s.end_sec, speaker: s.speaker as usize, text: s.text.clone() })
+        .map(|s| crate::transcript::Segment {
+            start: s.start_sec,
+            end: s.end_sec,
+            speaker: s.speaker as usize,
+            text: s.text.clone(),
+            tokens: Vec::new(),
+        })
         .collect();
-    let people: Vec<crate::transcript::Speaker> =
-        speakers.iter().map(|s| crate::transcript::Speaker { label: s.label.clone(), name: s.name.clone(), role: s.role.clone() }).collect();
+    let people: Vec<crate::transcript::Speaker> = speakers
+        .iter()
+        .map(|s| crate::transcript::Speaker {
+            label: s.label.clone(),
+            name: s.name.clone(),
+            role: s.role.clone(),
+        })
+        .collect();
     crate::transcript::transcript_for_summary(&segs, &people)
 }
 
 /// Stored in summary_meta.transcript_hash so later edits can be detected.
 pub fn text_hash(text: &str) -> String {
-    Sha256::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// A finished summary was made from a different transcript than the stored one. Summaries made before the hash
@@ -154,6 +188,30 @@ impl Job {
             segment_count,
             summary_status: self.summary_status.clone(),
             summary_error: self.summary_error.clone(),
+            downloading: self.downloading,
+            clarification_count: self.clarifications.as_ref().map_or(0, |value| {
+                serde_json::from_value::<crate::clarify::ClarificationSet>(value.clone())
+                    .map(|set| {
+                        crate::clarify::coalesce(set, crate::clarify::Answers::default())
+                            .0
+                            .questions
+                            .len()
+                    })
+                    .unwrap_or_else(|_| {
+                        value
+                            .get("questions")
+                            .and_then(Value::as_array)
+                            .map_or(0, Vec::len)
+                    })
+            }),
+            source_host: self
+                .source_url
+                .as_deref()
+                .and_then(|u| reqwest::Url::parse(u).ok())
+                .and_then(|u| {
+                    u.host_str()
+                        .map(|h| h.trim_start_matches("www.").to_string())
+                }),
             created_at: self.created_at,
             updated_at: self.updated_at,
             finished_at: self.finished_at,
@@ -162,11 +220,18 @@ impl Job {
 }
 
 pub async fn get_owned(db: &PgPool, id: Uuid, user_id: Uuid) -> sqlx::Result<Option<Job>> {
-    sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = $1 AND user_id = $2").bind(id).bind(user_id).fetch_optional(db).await
+    sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await
 }
 
 pub async fn segment_count(db: &PgPool, id: Uuid) -> sqlx::Result<i64> {
-    let (n,): (i64,) = sqlx::query_as("SELECT count(*) FROM segments WHERE job_id = $1").bind(id).fetch_one(db).await?;
+    let (n,): (i64,) = sqlx::query_as("SELECT count(*) FROM segments WHERE job_id = $1")
+        .bind(id)
+        .fetch_one(db)
+        .await?;
     Ok(n)
 }
 
@@ -184,7 +249,10 @@ pub async fn list_for_user(db: &PgPool, user_id: Uuid) -> sqlx::Result<Vec<JobVi
     .bind(user_id)
     .fetch_all(db)
     .await?;
-    Ok(rows.into_iter().map(|r| r.job.view(r.segment_count)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| r.job.view(r.segment_count))
+        .collect())
 }
 
 /// Jobs whose transcript contains `q` (case-insensitive substring; Thai has no word boundaries to index on),
@@ -197,8 +265,17 @@ pub struct TranscriptMatch {
     pub text: String,
 }
 
-pub async fn search_transcripts(db: &PgPool, user_id: Uuid, q: &str) -> sqlx::Result<Vec<TranscriptMatch>> {
-    let pattern = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+pub async fn search_transcripts(
+    db: &PgPool,
+    user_id: Uuid,
+    q: &str,
+) -> sqlx::Result<Vec<TranscriptMatch>> {
+    let pattern = format!(
+        "%{}%",
+        q.replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
     sqlx::query_as::<_, TranscriptMatch>(
         "SELECT s.job_id AS id, count(*) AS hits,
                 (array_agg(s.start_sec ORDER BY s.idx))[1] AS start,
@@ -214,7 +291,7 @@ pub async fn search_transcripts(db: &PgPool, user_id: Uuid, q: &str) -> sqlx::Re
 }
 
 pub async fn segments(db: &PgPool, id: Uuid) -> sqlx::Result<Vec<SegmentRow>> {
-    sqlx::query_as::<_, SegmentRow>("SELECT start_sec, end_sec, speaker, text FROM segments WHERE job_id = $1 ORDER BY idx")
+    sqlx::query_as::<_, SegmentRow>("SELECT start_sec, end_sec, speaker, text, tokens FROM segments WHERE job_id = $1 ORDER BY idx")
         .bind(id)
         .fetch_all(db)
         .await
@@ -226,11 +303,26 @@ mod tests {
 
     #[test]
     fn summary_input_follows_edits_and_renames() {
-        let seg = |text: &str| SegmentRow { start_sec: 16.0, end_sec: 20.0, speaker: 0, text: text.into() };
-        let mut people = vec![SpeakerView { label: "ผู้พูด 1".into(), name: "ผู้พูด 1".into(), role: None, talk_sec: 4.0, pct: 1.0 }];
+        let seg = |text: &str| SegmentRow {
+            start_sec: 16.0,
+            end_sec: 20.0,
+            speaker: 0,
+            text: text.into(),
+            tokens: None,
+        };
+        let mut people = vec![SpeakerView {
+            label: "ผู้พูด 1".into(),
+            name: "ผู้พูด 1".into(),
+            role: None,
+            talk_sec: 4.0,
+            pct: 1.0,
+        }];
         let before = summary_input(&[seg("สวัสดีครับ")], &people);
         assert_eq!(before, "[00:16] ผู้พูด 1: สวัสดีครับ\n\n## ผู้พูด\nผู้พูด 1: ไม่ทราบ\n");
-        assert_ne!(text_hash(&before), text_hash(&summary_input(&[seg("สวัสดีค่ะ")], &people)));
+        assert_ne!(
+            text_hash(&before),
+            text_hash(&summary_input(&[seg("สวัสดีค่ะ")], &people))
+        );
         people[0].name = "คุณเอ".into();
         assert!(summary_input(&[seg("สวัสดีครับ")], &people).ends_with("ผู้พูด 1: คุณเอ\n"));
     }

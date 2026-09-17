@@ -24,6 +24,8 @@ docs/rust-implementation/fixtures/
 docs/transcription-solution.md
 docs/gemini-3.1-pro-transcription.md
 docs/plan-clarification-questions.md
+/res.txt
+/สรุปประชุม*
 bench/results/
 prototype/
 scripts/pull_samples.sh

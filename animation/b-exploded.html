@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcripto · B · Exploded App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* B · Exploded App — the real Transcripto screen pulls apart into floating layers, then the summary comes forward */
+    :root { --bg: #f2f6fc; }
+    .stage::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(rgb(10 17 51 / 0.07) 1px, transparent 1.4px); background-size: 22px 22px; mask-image: radial-gradient(70% 70% at 70% 50%, #000, transparent); }
+    .art { perspective: 2600px; perspective-origin: 50% 40%; }
+    .b-rig { left: 50%; top: 50%; width: 64cqw; height: 44cqw; transform-style: preserve-3d; }
+    .b-layer { position: absolute; inset: 0; display: grid; align-content: start; gap: 1.2cqw; padding: 2cqw; border-radius: 2cqw; background: #fff; border: 1px solid var(--line); box-shadow: 0 3cqw 7cqw -2cqw rgb(10 30 110 / 0.4); color: var(--navy); overflow: hidden; backface-visibility: hidden; }
+    .b-tab { position: absolute; right: 1.6cqw; top: 1.4cqw; display: inline-flex; align-items: center; gap: 0.6cqw; padding: 0.3cqw 1.2cqw; border-radius: 99px; background: var(--navy); color: #fff; font-family: var(--font-d); font-size: max(9px, 1.3cqw); font-weight: 700; z-index: 2; }
+    .b-tab b { color: var(--cyan); }
+    .b-h { display: flex; align-items: baseline; gap: 1cqw; font-family: var(--font-d); font-size: max(11px, 1.7cqw); font-weight: 700; }
+    .b-h small { font-family: var(--font-b); font-weight: 500; font-size: max(9px, 1.2cqw); color: var(--muted); }
+    .s1 { --c: var(--s1); } .s2 { --c: var(--s2); } .s3 { --c: var(--s3); }
+
+    /* upload */
+    .b-upload { place-content: center; justify-items: center; gap: 1.6cqw; background: linear-gradient(180deg, #fff, #f5f9ff); }
+    .b-drop { position: relative; width: 44cqw; height: 20cqw; display: grid; place-items: center; border: 0.3cqw dashed #9fbef0; border-radius: 2cqw; background: #f3f8ff; color: var(--blue-6); font-size: max(10px, 1.4cqw); }
+    .b-drop .icon { width: 4cqw; height: 4cqw; }
+    .b-file { position: absolute; left: 50%; top: 50%; width: 30cqw; display: grid; grid-template-columns: auto 1fr; gap: 0.2cqw 1.2cqw; align-items: center; padding: 1.2cqw 1.4cqw; border-radius: 1.4cqw; background: #fff; box-shadow: 0 1.6cqw 3cqw -1cqw rgb(10 30 110 / 0.35); text-align: left; color: var(--navy); }
+    .b-file-ic { grid-row: span 2; display: grid; place-items: center; width: 4.4cqw; aspect-ratio: 1; border-radius: 1cqw; background: var(--blue); color: #fff; }
+    .b-file-ic .icon { width: 55%; height: 55%; }
+    .b-file b { font-family: var(--font-d); font-size: max(10px, 1.45cqw); }
+    .b-file small { font-size: max(9px, 1.15cqw); color: var(--muted); }
+    .b-progress { width: 44cqw; height: 1cqw; border-radius: 99px; background: #e3ebf6; overflow: hidden; }
+    .b-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--cyan)); transform-origin: left; }
+    .b-done { display: inline-flex; align-items: center; gap: 0.8cqw; padding: 0.5cqw 1.4cqw; border-radius: 1cqw; border: 1px solid #7dd3a8; color: #0b6b40; font-size: max(10px, 1.4cqw); font-weight: 600; }
+    .b-done .icon { width: max(11px, 1.6cqw); height: max(11px, 1.6cqw); stroke-width: 3; }
+
+    /* player */
+    .b-player { grid-template-rows: auto 1fr auto auto; background: #f7f9fd; }
+    .b-now { justify-self: start; display: inline-flex; align-items: center; gap: 1cqw; padding: 0.7cqw 1.2cqw; border-radius: 1cqw; background: var(--navy); color: #fff; font-size: max(9px, 1.25cqw); }
+    .b-now b { display: grid; place-items: center; width: 2.6cqw; aspect-ratio: 1; border-radius: 0.6cqw; background: #fff; color: var(--navy); font-family: var(--font-d); }
+    .b-now span { display: grid; line-height: 1.2; } .b-now small { font-size: max(8px, 1cqw); color: #9fb0d8; }
+    .b-now i { display: inline-flex; align-items: flex-end; gap: 0.25cqw; height: 1.8cqw; }
+    .b-now i em { width: 0.35cqw; background: #fff; border-radius: 99px; }
+    .b-art { display: grid; place-items: center; align-content: center; gap: 0.6cqw; color: var(--blue); font-size: max(9px, 1.2cqw); }
+    .b-art .icon { width: 5cqw; height: 5cqw; }
+    .b-art span { color: var(--muted); }
+    .b-sub { justify-self: center; max-width: 92%; padding: 0.9cqw 1.6cqw; border-radius: 1cqw; background: rgb(10 17 51 / 0.86); color: #fff; font-size: max(10px, 1.45cqw); line-height: 1.55; text-align: center; }
+    .b-sub b { color: var(--cyan-2); margin-right: 0.6cqw; }
+    .w { border-radius: 0.4cqw; padding: 0 0.1em; }
+    .w.hot { background: var(--blue); }
+    .b-controls { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1cqw; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: max(8px, 1.1cqw); color: var(--muted); }
+    .b-track { position: relative; height: 0.5cqw; border-radius: 99px; background: #dfe7f2; }
+    .b-track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--blue); transform-origin: left; }
+
+    /* speakers */
+    .b-rows { display: grid; gap: 0.9cqw; }
+    .b-row { display: grid; grid-template-columns: 14cqw 1fr; align-items: center; gap: 1.4cqw; }
+    .b-who { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 0.9cqw; padding: 0.6cqw 0.8cqw; border-radius: 1cqw; }
+    .b-who.on { background: #eef4ff; }
+    .b-av { grid-row: span 2; display: grid; place-items: center; width: 3.4cqw; aspect-ratio: 1; border-radius: 50%; border: 0.25cqw solid var(--c); color: var(--navy); font-family: var(--font-d); font-size: max(9px, 1.3cqw); font-weight: 700; }
+    .b-who b { font-size: max(10px, 1.3cqw); display: inline-flex; align-items: center; gap: 0.6cqw; }
+    .b-who b .icon { width: max(9px, 1.2cqw); height: max(9px, 1.2cqw); color: var(--blue); }
+    .b-who small { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: max(8px, 1cqw); color: var(--muted); }
+    .b-lane { position: relative; height: 3cqw; border-radius: 0.8cqw; background: #f1f4f9; }
+    .b-seg { position: absolute; top: 0.6cqw; bottom: 0.6cqw; border-radius: 0.5cqw; background: color-mix(in srgb, var(--c) 45%, #fff); transform-origin: left center; }
+    .b-lanes { position: relative; }
+    .b-playhead { position: absolute; top: -0.6cqw; bottom: -0.6cqw; left: 15.4cqw; width: 0.3cqw; border-radius: 99px; background: var(--blue); }
+    .b-playhead::before { content: ""; position: absolute; left: 50%; top: -0.6cqw; width: 1.4cqw; aspect-ratio: 1; border-radius: 50%; background: var(--blue); translate: -50% 0; }
+
+    /* transcript */
+    .b-search { display: flex; align-items: center; gap: 1cqw; padding: 0.8cqw 1.2cqw; border-radius: 1cqw; border: 1px solid var(--line); color: var(--muted); font-size: max(9px, 1.2cqw); }
+    .b-search .icon { width: max(10px, 1.4cqw); height: max(10px, 1.4cqw); }
+    .b-lines { position: relative; display: grid; gap: 1cqw; }
+    .b-line { display: grid; grid-template-columns: 6cqw 1fr; gap: 1cqw; padding-left: 1.2cqw; }
+    .b-line time { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: max(9px, 1.15cqw); color: var(--muted); padding-top: 0.2cqw; }
+    .b-line p { display: grid; gap: 0.2cqw; font-size: max(10px, 1.35cqw); line-height: 1.5; color: var(--text-2); }
+    .b-line p b { display: inline-flex; align-items: center; gap: 0.6cqw; font-size: max(9px, 1.2cqw); color: color-mix(in srgb, var(--c) 85%, #000); }
+    .b-line p b::before { content: ""; width: 0.9cqw; aspect-ratio: 1; border-radius: 50%; background: var(--c); }
+    .b-active { position: absolute; left: 0; top: 0; width: 0.35cqw; border-radius: 99px; background: var(--blue); }
+
+    /* summary */
+    .b-summary { gap: 1.3cqw; padding: 2.4cqw 2.8cqw; }
+    .b-actions { display: flex; flex-wrap: wrap; gap: 1cqw; }
+    .b-btn { display: inline-flex; align-items: center; gap: 0.7cqw; padding: 0.7cqw 1.4cqw; border-radius: 1cqw; font-size: max(9px, 1.25cqw); font-weight: 600; color: var(--blue-6); border: 1px solid #b9cff5; }
+    .b-btn .icon { width: max(10px, 1.4cqw); height: max(10px, 1.4cqw); }
+    .b-btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .b-summary h3 { min-height: 1.3em; font-family: var(--font-d); font-size: max(13px, 2.2cqw); line-height: 1.3; }
+    .b-para { display: grid; gap: 0.7cqw; }
+    .b-para span { display: block; height: max(5px, 0.9cqw); border-radius: 99px; background: #e2e9f3; transform-origin: left; }
+    .b-todos { display: grid; gap: 0.8cqw; }
+    .b-todos li { display: flex; align-items: center; gap: 1cqw; font-size: max(10px, 1.4cqw); }
+    .b-cb { display: grid; place-items: center; width: 2.4cqw; aspect-ratio: 1; border-radius: 0.6cqw; border: 0.25cqw solid #b9cff5; }
+    .b-cb svg { width: 80%; height: 80%; fill: none; stroke: var(--blue); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+
+    @media (max-width: 767px) {
+      .b-rig { width: 96cqw; height: 78cqw; }
+      .b-layer { padding: 3.4cqw; gap: 2.2cqw; border-radius: 3.4cqw; }
+      .b-tab { font-size: 10px; padding: 2px 7px; right: 3cqw; top: 2.6cqw; }
+      .b-h { font-size: 13px; } .b-h small { font-size: 10px; }
+      .b-drop { width: 80cqw; height: 34cqw; font-size: 11px; } .b-drop .icon { width: 7cqw; height: 7cqw; }
+      .b-file { width: 64cqw; padding: 2.4cqw; gap: 0.4cqw 2.4cqw; border-radius: 3cqw; } .b-file-ic { width: 9cqw; border-radius: 2cqw; }
+      .b-file b { font-size: 12px; } .b-file small { font-size: 10px; }
+      .b-progress { width: 80cqw; height: 2cqw; } .b-done { font-size: 11px; padding: 2px 8px; gap: 4px; }
+      .b-now { font-size: 10px; padding: 4px 7px; gap: 5px; } .b-now b { width: 18px; } .b-now small { font-size: 9px; } .b-now i { height: 12px; gap: 2px; } .b-now i em { width: 2px; }
+      .b-art .icon { width: 9cqw; height: 9cqw; } .b-art { font-size: 10px; }
+      .b-sub { font-size: 11.5px; padding: 5px 9px; }
+      .b-controls { font-size: 9px; gap: 2cqw; } .b-track { height: 1cqw; }
+      .b-row { grid-template-columns: 26cqw 1fr; gap: 2cqw; } .b-rows { gap: 1.6cqw; }
+      .b-who { gap: 0 1.6cqw; padding: 1cqw; } .b-av { width: 6cqw; font-size: 10px; } .b-who b { font-size: 11px; } .b-who small { font-size: 9px; }
+      .b-lane { height: 6cqw; border-radius: 1.6cqw; } .b-seg { top: 1.2cqw; bottom: 1.2cqw; }
+      .b-playhead { left: 28cqw; width: 0.6cqw; }
+      .b-search { font-size: 10px; padding: 4px 8px; }
+      .b-line { grid-template-columns: 11cqw 1fr; gap: 2cqw; padding-left: 2.4cqw; } .b-line time { font-size: 10px; }
+      .b-line p { font-size: 11.5px; } .b-line p b { font-size: 10.5px; } .b-line p b::before { width: 1.8cqw; }
+      .b-active { width: 0.7cqw; }
+      .b-summary { gap: 2.2cqw; padding: 4cqw; }
+      .b-btn { font-size: 10.5px; padding: 3px 8px; gap: 4px; }
+      .b-summary h3 { font-size: 15px; } .b-para { gap: 1.4cqw; } .b-para span { height: 6px; }
+      .b-todos { gap: 1.8cqw; } .b-todos li { font-size: 12px; gap: 2cqw; } .b-cb { width: 5cqw; border-radius: 1.2cqw; }
+    }
+  </style>
+</head>
+<body>
+  <header class="proto-bar"><a href="index.html">← เลือกแบบ</a><span>B · Exploded App</span></header>
+
+  <section class="story">
+    <div class="stage">
+      <div class="copy">
+        <p class="kicker"><span>ผลงานจริง 03</span>Transcripto</p>
+        <h2 class="title">ประชุมจบ<br>สรุปก็พร้อม</h2>
+        <p class="lead">อัปโหลดไฟล์เสียงประชุม ระบบแยกผู้พูด ถอดเสียงพร้อมเวลา แล้วสรุปประเด็นกับสิ่งที่ต้องทำให้อ่านจบในไม่กี่นาที</p>
+        <ol class="steps" aria-label="ขั้นตอนการทำงาน">
+          <li data-step-at="0"><b>01</b>อัปโหลดเสียง</li>
+          <li data-step-at="2.5"><b>02</b>แยกผู้พูด</li>
+          <li data-step-at="5"><b>03</b>ถอดเสียง</li>
+          <li data-step-at="8.5"><b>04</b>สรุปประชุม</li>
+        </ol>
+      </div>
+
+      <div class="art" aria-hidden="true">
+        <div class="b-rig" data-o="rig">
+          <!-- bottom → top -->
+          <div class="b-layer b-player" data-o="lPlayer">
+            <span class="b-tab"><b>01</b> Player</span>
+            <p class="b-now"><b data-o="nowNum">1</b><span><small>กำลังพูด</small><span data-o="nowName">ผู้พูด 1</span></span><i><em style="height:40%"></em><em style="height:90%"></em><em style="height:60%"></em></i></p>
+            <p class="b-art"><svg class="icon"><use href="#i-music"/></svg><span>ไฟล์เสียง</span></p>
+            <p class="b-sub" data-o="sub"><b data-o="subName">ผู้พูด 1</b><span data-o="subText">งบการตลาดไตรมาสนี้ ขอเพิ่มอีก 15% นะคะ</span></p>
+            <p class="b-controls"><span data-o="clock">00:00</span><span class="b-track"><i data-o="track" style="width:100%"></i></span><span>45:12</span></p>
+          </div>
+
+          <div class="b-layer b-speakers" data-o="lSpeakers">
+            <span class="b-tab"><b>02</b> แยกผู้พูด</span>
+            <p class="b-h">ผู้พูด <small>ตรวจพบ 3 คน · คลิกแถบเพื่อข้ามไปช่วงนั้น</small></p>
+            <div class="b-lanes">
+              <div class="b-rows">
+                <div class="b-row s1"><p class="b-who" data-o="who1"><span class="b-av">1</span><b>ผู้พูด 1</b><small>17:10 · 38%</small></p><span class="b-lane"><i class="b-seg" style="left:2%;width:14%"></i><i class="b-seg" style="left:44%;width:10%"></i><i class="b-seg" style="left:78%;width:8%"></i></span></div>
+                <div class="b-row s2"><p class="b-who" data-o="who2"><span class="b-av">2</span><b>ผู้พูด 2</b><small>12:12 · 27%</small></p><span class="b-lane"><i class="b-seg" style="left:17%;width:9%"></i><i class="b-seg" style="left:56%;width:12%"></i><i class="b-seg" style="left:88%;width:6%"></i></span></div>
+                <div class="b-row s3"><p class="b-who" data-o="who3"><span class="b-av">3</span><b><span data-o="rename">ผู้พูด 3</span><svg class="icon" data-o="pencil"><use href="#i-pencil"/></svg></b><small>15:50 · 35%</small></p><span class="b-lane"><i class="b-seg" style="left:27%;width:15%"></i><i class="b-seg" style="left:69%;width:8%"></i><i class="b-seg" style="left:95%;width:4%"></i></span></div>
+              </div>
+              <span class="b-playhead" data-o="playhead"></span>
+            </div>
+          </div>
+
+          <div class="b-layer b-transcript" data-o="lTranscript">
+            <span class="b-tab"><b>03</b> ทรานสคริปต์</span>
+            <p class="b-h">ทรานสคริปต์ <small>36 ช่วง · ผู้พูด 3 คน</small></p>
+            <p class="b-search"><svg class="icon"><use href="#i-search"/></svg>ค้นหาคำในทรานสคริปต์</p>
+            <div class="b-lines">
+              <span class="b-active" data-o="active"></span>
+              <div class="b-line s1" data-o="line1"><time>00:00</time><p><b>ผู้พูด 1</b>งบการตลาดไตรมาสนี้ ขอเพิ่มอีก 15% นะคะ</p></div>
+              <div class="b-line s2" data-o="line2"><time>00:13</time><p><b>ผู้พูด 2</b>ถ้าเพิ่ม ต้องเลื่อนเปิดตัวสินค้าไปพฤศจิกา</p></div>
+              <div class="b-line s3" data-o="line3"><time>00:21</time><p><b data-o="lineName3">ผู้พูด 3</b>งั้นขอตัวเลขประกอบภายในศุกร์นี้</p></div>
+            </div>
+          </div>
+
+          <div class="b-layer b-summary" data-o="lSummary">
+            <span class="b-tab"><b>04</b> สรุปประชุม</span>
+            <p class="b-h">สรุปการประชุม</p>
+            <p class="b-actions"><span class="b-btn primary" data-o="btn1"><svg class="icon"><use href="#i-download"/></svg>ดาวน์โหลด .txt</span><span class="b-btn" data-o="btn2"><svg class="icon"><use href="#i-copy"/></svg>คัดลอก</span><span class="b-btn" data-o="btn3"><svg class="icon"><use href="#i-refresh"/></svg>สรุปใหม่</span></p>
+            <h3 data-o="sumTitle">วางแผนงบการตลาดไตรมาส 4</h3>
+            <p class="b-para" data-o="para"><span style="width:96%"></span><span style="width:88%"></span><span style="width:64%"></span></p>
+            <ul class="b-todos">
+              <li><span class="b-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck1"/></svg></span>เตรียมตัวเลขประกอบภายในศุกร์</li>
+              <li><span class="b-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck2"/></svg></span>ประเมินผลกระทบไทม์ไลน์เปิดตัว</li>
+              <li><span class="b-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck3"/></svg></span>นัดประชุมตัดสินใจรอบถัดไป</li>
+            </ul>
+          </div>
+
+          <div class="b-layer b-upload" data-o="lUpload">
+            <p class="b-h">อัปโหลดไฟล์ประชุม</p>
+            <div class="b-drop"><span><svg class="icon"><use href="#i-upload"/></svg></span>
+              <p class="b-file" data-o="file"><span class="b-file-ic"><svg class="icon"><use href="#i-music"/></svg></span><b>ประชุมทีม_Q4.m4a</b><small>12 MB · 45:12</small></p>
+            </div>
+            <span class="b-progress"><i data-o="bar"></i></span>
+            <p class="b-done" data-o="done"><svg class="icon"><use href="#i-check"/></svg>ถอดเสียงเสร็จแล้ว · 3 ผู้พูด</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="after"><p>ฉากถัดไป · Synergy Connect</p></section>
+
+  <script src="../vendor/gsap.min.js"></script>
+  <script src="../vendor/ScrollTrigger.min.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      var O = function (n) { return document.querySelector('[data-o="' + n + '"]'); };
+      var OO = function (a) { return a.map(O); };
+      var art = document.querySelector('.art');
+      var LINES = [
+        { name: 'ผู้พูด 1', num: '1', text: 'งบการตลาดไตรมาสนี้ ขอเพิ่มอีก 15% นะคะ', clock: '00:05' },
+        { name: 'ผู้พูด 2', num: '2', text: 'ถ้าเพิ่ม ต้องเลื่อน เปิดตัวสินค้า ไปพฤศจิกา', clock: '00:16' },
+        { name: 'คุณมาลี', num: '3', text: 'งั้นขอ ตัวเลขประกอบ ภายในศุกร์นี้', clock: '00:23' }
+      ];
+
+      TX.run(function (tl, env) {
+        var m = env.mobile;
+        var rig = O('rig');
+        var layers = OO(['lPlayer', 'lSpeakers', 'lTranscript', 'lSummary']);
+        var W = function (f) { return function () { return art.offsetWidth * f; }; };
+        var gap = m ? 0.1 : 0.085;
+        var iso = m ? { rotateX: 54, rotateZ: -32, scale: 0.72 } : { rotateX: 56, rotateZ: -38, scale: 0.8 };
+
+        gsap.set(rig, { xPercent: -50, yPercent: -50, rotateX: 0, rotateZ: 0, scale: 1 });
+        gsap.set(layers, { z: 0 });
+        gsap.set(O('lUpload'), { z: W(0.01) });
+        gsap.set(rig.querySelectorAll('.b-tab'), { autoAlpha: 0 });
+
+        /* 01 · upload — the file lands in the drop zone and is transcribed */
+        tl.fromTo(O('file'), { xPercent: -50, yPercent: -260, rotate: -8, autoAlpha: 0 }, { xPercent: -50, yPercent: -50, rotate: 0, autoAlpha: 1, duration: 0.8, ease: 'back.out(1.4)', immediateRender: true }, 0.15);
+        tl.fromTo(O('bar'), { scaleX: 0 }, { scaleX: 1, duration: 1, ease: 'none', immediateRender: true }, 0.9);
+        tl.fromTo(O('done'), { autoAlpha: 0, scale: 0.7 }, { autoAlpha: 1, scale: 1, duration: 0.3, ease: 'back.out(2.2)', immediateRender: true }, 1.95);
+
+        /* 02 · explode — the screen tilts into isometric and pulls apart into its four layers,
+           then settles into a readable deck where one layer at a time comes to the front */
+        var H = function (f) { return function () { return art.offsetHeight * f; }; };
+        var deckPose = m ? { rotateX: 12, rotateY: 0, rotateZ: 0, scale: 0.94 } : { rotateX: 14, rotateY: -10, rotateZ: 0, scale: 0.9 };
+        function front(i, at, dur) {
+          layers.forEach(function (l, j) {
+            var d = j - i;
+            var vars = d === 0
+              ? { z: W(0.06), y: 0, x: 0, opacity: 1, scale: 1 }
+              : { z: W(-0.05 - 0.03 * Math.abs(d)), y: H((d < 0 ? -0.05 : 0.05) * Math.abs(d)), x: W((d < 0 ? -0.025 : 0.025) * Math.abs(d)), opacity: Math.max(0.2, 0.55 - 0.12 * Math.abs(d)), scale: 0.96 };
+            tl.to(l, Object.assign(vars, { duration: dur || 0.7, ease: 'power3.inOut' }), at);
+          });
+        }
+        tl.to(O('lUpload'), { z: W(0.5), autoAlpha: 0, duration: 0.6, ease: 'power2.in' }, 2.5);
+        tl.to(rig, Object.assign({ duration: 0.9, ease: 'power3.inOut' }, iso, { scale: m ? 0.6 : 0.62, y: H(0.12) }), 2.6);
+        layers.forEach(function (l, i) { tl.to(l, { z: W(i * gap * 2.1), duration: 0.8, ease: 'power3.inOut' }, 2.75 + i * 0.07); });
+        tl.to(rig.querySelectorAll('.b-tab'), { autoAlpha: 1, stagger: 0.08, duration: 0.25 }, 3.1);
+        // settle into the deck with the speakers layer in front; its lanes fill in
+        tl.to(rig, Object.assign({ y: 0, duration: 0.8, ease: 'power3.inOut' }, deckPose), 3.8);
+        front(1, 3.8, 0.8);
+        tl.fromTo(O('lSpeakers').querySelectorAll('.b-seg'), { scaleX: 0 }, { scaleX: 1, stagger: 0.06, duration: 0.3, ease: 'power2.out', immediateRender: true }, 4.3);
+
+        /* 03 · transcript — the player comes forward (subtitles follow the speaker), then the transcript */
+        front(0, 5, 0.6);
+        tl.fromTo(O('track'), { scaleX: 0.02 }, { scaleX: 0.5, duration: 3.2, ease: 'none', immediateRender: true }, 5.2);
+        tl.fromTo(O('playhead'), { x: 0 }, { x: function () { return O('playhead').parentElement.offsetWidth * 0.28; }, duration: 3.2, ease: 'none', immediateRender: true }, 5.2);
+        front(2, 6.8, 0.6);
+        var windows = [[5.2, 6.2], [6.3, 7.3], [7.4, 8.4]];
+        var words = null, currentLine = -1;
+        var subText = O('subText');
+        gsap.set(O('pencil'), { autoAlpha: 0, scale: 0.4 });
+        tl.to(O('pencil'), { autoAlpha: 1, scale: 1.2, duration: 0.2, ease: 'back.out(2)' }, 7.2);
+        tl.to(O('pencil'), { scale: 1, duration: 0.15 }, 7.4);
+        var rows = OO(['line1', 'line2', 'line3']);
+        env.onTime(function (t) {
+          var line = -1;
+          windows.forEach(function (w, i) { if (t >= w[0]) line = i; });
+          if (t < windows[0][0]) line = 0;
+          if (line !== currentLine) {
+            currentLine = line;
+            var L = LINES[line];
+            O('nowNum').textContent = L.num; O('nowName').textContent = L.name; O('subName').textContent = L.name; O('clock').textContent = L.clock;
+            subText.textContent = L.text; words = TX.words(subText);
+            ['who1', 'who2', 'who3'].forEach(function (n, i) { O(n).classList.toggle('on', i === line); });
+            var row = rows[line];
+            gsap.to(O('active'), { y: row.offsetTop, height: row.offsetHeight, duration: 0.25, overwrite: true });
+          }
+          var p = TX.progress(t, windows[line][0], windows[line][1]);
+          var hot = Math.min(Math.floor(p * words.length), words.length - 1);
+          words.forEach(function (w, j) { w.classList.toggle('hot', p > 0 && p < 1 && j === hot); });
+          var renamed = t >= 7.35;
+          O('rename').textContent = renamed ? 'คุณมาลี' : 'ผู้พูด 3';
+          O('lineName3').textContent = renamed ? 'คุณมาลี' : 'ผู้พูด 3';
+        });
+
+        /* 04 · summary — the summary layer comes to the front, straightens up and fills in */
+        tl.to(rig.querySelectorAll('.b-tab'), { autoAlpha: 0, duration: 0.2 }, 8.5);
+        front(3, 8.5, 0.8);
+        tl.to([layers[0], layers[1], layers[2]], { opacity: 0, duration: 0.5 }, 8.9);
+        tl.to(rig, { rotateX: 0, rotateY: 0, rotateZ: 0, scale: m ? 1 : 1.1, duration: 0.9, ease: 'power3.inOut' }, 8.7);
+        var title = TX.typer(O('sumTitle'));
+        env.onTime(function (t) { title(TX.progress(t, 9.6, 10.2)); });
+        tl.fromTo(O('para').children, { scaleX: 0 }, { scaleX: 1, stagger: 0.12, duration: 0.35, ease: 'power2.out', immediateRender: true }, 10.1);
+        gsap.set(OO(['ck1', 'ck2', 'ck3']), { strokeDashoffset: 1 });
+        tl.to(OO(['ck1', 'ck2', 'ck3']), { strokeDashoffset: 0, stagger: 0.3, duration: 0.25, ease: 'power2.out' }, 10.7);
+        tl.fromTo(OO(['btn1', 'btn2', 'btn3']), { autoAlpha: 0, y: -10 }, { autoAlpha: 1, y: 0, stagger: 0.1, duration: 0.3, ease: 'back.out(2)', immediateRender: true }, 11.6);
+        tl.to(O('btn1'), { scale: 1.1, duration: 0.18, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 12.1);
+        tl.to({}, { duration: 0.8 }, 12.5);
+      });
+    })();
+  </script>
+</body>
+</html>

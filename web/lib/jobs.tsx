@@ -24,8 +24,11 @@ interface JobsCtx {
   setLibraryHref: (href: string) => void;
   refresh: () => Promise<void>;
   addUpload: (file: File) => Promise<void>;
+  /** Creates a job from a video link; the server downloads it. Resolves to whether the job was created. */
+  addLink: (url: string) => Promise<boolean>;
   cancelUpload: (id: string) => Promise<void>;
   retry: (id: string) => Promise<void>;
+  retranscribe: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   patchJob: (job: Partial<Job> & { id: string }) => void;
   setViewing: (id: string | null) => void;
@@ -78,6 +81,11 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           setCelebrateId(j.id);
           if (isViewing) toast(`ถอดเสียงเสร็จแล้ว พบผู้พูด ${j.speakers.length} คน ทรานสคริปต์แสดงอยู่ด้านขวา`);
           else toast(`ถอดเสียง “${j.name}” เสร็จแล้ว · พบผู้พูด ${j.speakers.length} คน`, { action: { label: "เปิดดู", run: () => router.push(`/jobs/${j.id}`) } });
+        } else if (p.downloading && !j.downloading && j.status === "processing") {
+          toast(`ดาวน์โหลด “${j.name}” จากลิงก์เสร็จแล้ว ระบบกำลังถอดเสียงอยู่เบื้องหลัง`, {
+            icon: "check",
+            action: isViewing ? undefined : { label: "เล่นวิดีโอ", run: () => router.push(`/jobs/${j.id}`) },
+          });
         } else if (p.status !== "failed" && j.status === "failed" && p.status !== "uploading") {
           toast(`ถอดเสียง “${j.name}” ไม่สำเร็จ: ${j.error ?? ""}`, { kind: "err" });
         } else if (p.status === "done" && j.status === "done" && (p.summary_status === "pending" || p.summary_status === "running")) {
@@ -200,6 +208,22 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     [refresh, router, toast],
   );
 
+  const addLink = useCallback(
+    async (url: string) => {
+      try {
+        const job = await api<Job>("/api/jobs/import", { method: "POST", body: { url } });
+        prev.current.set(job.id, job);
+        setJobs((xs) => [job, ...xs.filter((x) => x.id !== job.id)]);
+        toast("กำลังดาวน์โหลดวิดีโอจากลิงก์ ปิดหน้านี้ได้ ระบบทำต่อเบื้องหลัง", { icon: "link" });
+        return true;
+      } catch (e) {
+        toast((e as Error).message, { kind: "err" });
+        return false;
+      }
+    },
+    [toast],
+  );
+
   const remove = useCallback(
     async (id: string) => {
       setJobs((xs) => xs.filter((j) => j.id !== id));
@@ -219,7 +243,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       const job = prev.current.get(id);
       uploadsRef.current[id]?.xhr.abort();
       await remove(id);
-      toast(`ยกเลิกการอัปโหลด “${job?.name ?? ""}” แล้ว`, { icon: "x" });
+      toast(`ยกเลิกการ${job?.downloading ? "ดาวน์โหลด" : "อัปโหลด"} “${job?.name ?? ""}” แล้ว`, { icon: "x" });
     },
     [remove, toast],
   );
@@ -238,9 +262,27 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     [toast],
   );
 
+  const retranscribe = useCallback(
+    async (id: string) => {
+      const job = prev.current.get(id);
+      if (!job) return;
+      const confirmed = window.confirm(`ถอดเสียง “${job.name}” ใหม่?\n\nทรานสคริปต์ สรุป และข้อความที่เคยแก้จะถูกแทนที่ด้วยผลใหม่`);
+      if (!confirmed) return;
+      try {
+        const updated = await api<Job>(`/api/jobs/${id}/retranscribe`, { method: "POST" });
+        prev.current.set(id, updated);
+        setJobs((xs) => xs.map((x) => (x.id === id ? updated : x)));
+        toast(`เริ่มถอดเสียง “${updated.name}” ใหม่แล้ว`, { icon: "refresh" });
+      } catch (e) {
+        toast((e as Error).message, { kind: "err" });
+      }
+    },
+    [toast],
+  );
+
   const value = useMemo(
-    () => ({ jobs, uploads, loaded, libraryHref, setLibraryHref, refresh, addUpload, cancelUpload, retry, remove, patchJob, setViewing, bellRing, celebrateId }),
-    [jobs, uploads, loaded, libraryHref, refresh, addUpload, cancelUpload, retry, remove, patchJob, setViewing, bellRing, celebrateId],
+    () => ({ jobs, uploads, loaded, libraryHref, setLibraryHref, refresh, addUpload, addLink, cancelUpload, retry, retranscribe, remove, patchJob, setViewing, bellRing, celebrateId }),
+    [jobs, uploads, loaded, libraryHref, refresh, addUpload, addLink, cancelUpload, retry, retranscribe, remove, patchJob, setViewing, bellRing, celebrateId],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

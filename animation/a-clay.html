@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcripto · A · Clay Buddies</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="buddies.css">
+  <style>
+    /* A · Clay Buddies — soft chunky clay objects; each speaker is a round buddy that talks */
+    :root { --bg: #eef5fd; }
+    .stage::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(40% 50% at 80% 20%, rgb(34 195 243 / 0.16), transparent 70%), radial-gradient(45% 55% at 60% 90%, rgb(138 79 255 / 0.1), transparent 70%); }
+    .clay { background: #fff; border-radius: 3cqw; box-shadow: inset 0 -0.7cqw 0 rgb(10 60 160 / 0.07), inset 0 0.5cqw 0 rgb(255 255 255 / 0.95), 0 1.1cqw 0 #d5e3f4, 0 3.2cqw 5cqw -1.2cqw rgb(11 50 140 / 0.3); }
+    .blob { width: 14cqw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #cfe6fb 60%, #b8d6f5); opacity: 0.7; animation: bob 7s ease-in-out infinite alternate; }
+    .blob.b2 { width: 8cqw; animation-duration: 9s; background: radial-gradient(circle at 35% 30%, #fff, #e3d8ff 60%, #cdbcff); }
+    @keyframes bob { to { transform: translateY(-2.4cqw) rotate(12deg); } }
+
+    /* the Transcripto machine */
+    .a-machine { width: 30cqw; display: grid; justify-items: center; gap: 1.6cqw; padding: 2.4cqw 2cqw 2.2cqw; border-radius: 4cqw; background: linear-gradient(180deg, #1b2a78, #0a1133); color: #fff; box-shadow: inset 0 0.6cqw 0 rgb(255 255 255 / 0.18), inset 0 -0.9cqw 0 rgb(0 0 0 / 0.25), 0 1.4cqw 0 #060b24, 0 4cqw 6cqw -1.5cqw rgb(4 10 42 / 0.5); transform-origin: 0 0; z-index: 2; }
+    .a-slot { width: 16cqw; height: 1.6cqw; border-radius: 99px; background: #050a1e; box-shadow: inset 0 0.4cqw 0.6cqw rgb(0 0 0 / 0.8); }
+    .a-brand { font-family: var(--font-d); font-weight: 800; font-size: max(11px, 1.9cqw); letter-spacing: -0.01em; }
+    .a-brand span { color: var(--cyan); }
+    .a-dome { position: relative; display: grid; place-items: center; width: 13cqw; aspect-ratio: 1; }
+    .a-dome svg.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+    .a-dome .ring circle { fill: none; stroke-width: 7; }
+    .a-dome .ring .track { stroke: rgb(255 255 255 / 0.12); }
+    .a-dome .ring .fill { stroke: var(--cyan); stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+    .a-mic { display: grid; place-items: center; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #7ab8ff, var(--blue) 55%, #0636a8); box-shadow: inset 0 -0.6cqw 0 rgb(0 0 0 / 0.2), 0 0.8cqw 1.6cqw rgb(0 0 0 / 0.35); }
+    .a-mic .icon { width: 45%; height: 45%; color: #fff; }
+    .a-status { display: inline-flex; align-items: center; gap: 0.8cqw; padding: 0.5cqw 1.4cqw; border-radius: 99px; background: #d7f5e6; color: #0b6b40; font-size: max(10px, 1.45cqw); font-weight: 700; }
+    .a-status .icon { width: max(11px, 1.6cqw); height: max(11px, 1.6cqw); stroke-width: 3; }
+
+    .a-file { width: 24cqw; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0.6cqw 1.4cqw; padding: 1.6cqw; z-index: 3; }
+    .a-file-ic { grid-row: span 2; display: grid; place-items: center; width: 5.4cqw; aspect-ratio: 1; border-radius: 1.6cqw; background: radial-gradient(circle at 35% 30%, #7ab8ff, var(--blue)); color: #fff; box-shadow: inset 0 -0.4cqw 0 rgb(0 0 0 / 0.18); }
+    .a-file-ic .icon { width: 55%; height: 55%; }
+    .a-file b { font-family: var(--font-d); font-size: max(10px, 1.55cqw); }
+    .a-file small { font-size: max(9px, 1.25cqw); color: var(--muted); }
+
+    .a-wave { left: 6%; top: 36%; width: 88cqw; height: 11cqw; display: flex; align-items: center; gap: 0.55cqw; padding: 1.6cqw 2cqw; border-radius: 99px; transform-origin: left center; z-index: 1; }
+    .a-wave i { flex: 1; height: calc(var(--h) * 100%); border-radius: 99px; background: #c5d2e6; }
+    .a-head { left: 6%; top: 34%; width: 0.6cqw; height: 15cqw; border-radius: 99px; background: var(--navy); box-shadow: 0 0 0 0.4cqw #fff; z-index: 2; opacity: 0; }
+
+    .a-buddy { width: 12cqw; display: grid; justify-items: center; gap: 1cqw; z-index: 4; transform-origin: 50% 100%; }
+    .a-ball { position: relative; width: 12cqw; aspect-ratio: 1; }
+    .a-ball .bd { position: absolute; inset: -14%; width: 128%; height: 128%; }
+    .a-ball .num { position: absolute; z-index: 2; right: -1.2cqw; top: -0.4cqw; display: grid; place-items: center; width: 4cqw; aspect-ratio: 1; border-radius: 50%; background: #fff; color: var(--navy); font-family: var(--font-d); font-size: max(10px, 1.6cqw); font-weight: 800; box-shadow: 0 0.6cqw 1.2cqw -0.4cqw rgb(4 10 42 / 0.4); }
+    .a-tag { display: inline-flex; align-items: center; gap: 0.7cqw; padding: 0.5cqw 1.2cqw; border-radius: 99px; font-family: var(--font-d); font-size: max(10px, 1.45cqw); font-weight: 700; white-space: nowrap; }
+    .a-tag em { font-style: normal; padding: 0.1cqw 0.9cqw; border-radius: 99px; background: color-mix(in srgb, var(--c) 16%, #fff); color: color-mix(in srgb, var(--c) 80%, #000); font-family: var(--font-b); font-weight: 600; }
+    .a-tag .icon { width: max(10px, 1.5cqw); height: max(10px, 1.5cqw); color: var(--blue); }
+    .s1 { --c: var(--s1); } .s2 { --c: var(--s2); } .s3 { --c: var(--s3); }
+    .bd-switch { gap: 2px !important; padding: 4px !important; flex-wrap: wrap; }
+    .bd-switch a { padding: 5px 10px; border-radius: 99px; text-decoration: none; color: #b9c8ea; }
+    .bd-switch a:first-child { color: #fff; font-weight: 700; }
+    .bd-switch a[aria-current] { background: #fff; color: var(--navy); }
+
+    .a-bubble { width: 62cqw; display: grid; gap: 0.5cqw; padding: 1.6cqw 2.2cqw; border-radius: 2.6cqw; z-index: 3; box-shadow: inset 0.5cqw 0 0 var(--c), inset 0 -0.6cqw 0 rgb(10 60 160 / 0.06), 0 1cqw 0 #d5e3f4, 0 3cqw 5cqw -1.2cqw rgb(11 50 140 / 0.28); }
+    .a-bubble::before { content: ""; position: absolute; left: -1.6cqw; top: 2.2cqw; border: 1cqw solid transparent; border-right: 1.2cqw solid #fff; }
+    .a-ts { display: flex; align-items: center; gap: 1cqw; font-size: max(10px, 1.35cqw); color: var(--muted); }
+    .a-ts b { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; color: var(--text-2); }
+    .a-ts span { font-weight: 700; color: color-mix(in srgb, var(--c) 85%, #000); }
+    .a-say { font-size: max(11px, 1.8cqw); line-height: 1.55; }
+    .w { border-radius: 0.5cqw; transition: background-color 120ms, color 120ms; }
+    .w.hot { background: color-mix(in srgb, var(--c) 22%, #fff); color: color-mix(in srgb, var(--c) 85%, #000); }
+
+    .a-note { width: 58cqw; display: grid; gap: 1.4cqw; padding: 2.6cqw 3cqw 3cqw; border-radius: 3.4cqw; z-index: 5; transform-origin: 0% 50%; }
+    .a-note-head { display: flex; align-items: center; justify-content: space-between; gap: 1cqw; font-size: max(10px, 1.4cqw); color: var(--muted); }
+    .a-note-head span { display: inline-flex; align-items: center; gap: 0.8cqw; font-weight: 700; color: var(--blue-6); }
+    .a-note-head .icon { width: max(12px, 1.8cqw); height: max(12px, 1.8cqw); }
+    .a-note h3 { min-height: 1.35em; font-family: var(--font-d); font-size: max(14px, 2.4cqw); line-height: 1.35; }
+    .a-points { display: grid; gap: 0.6cqw; }
+    .a-points li { position: relative; padding-left: 2.2cqw; font-size: max(11px, 1.6cqw); color: var(--text-2); }
+    .a-points li::before { content: ""; position: absolute; left: 0; top: 0.75em; width: 1cqw; height: 1cqw; border-radius: 50%; background: var(--cyan); translate: 0 -50%; }
+    .a-sub { font-size: max(10px, 1.3cqw); font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
+    .a-todos { display: grid; gap: 0.9cqw; }
+    .a-todos li { display: flex; align-items: center; gap: 1.2cqw; font-size: max(11px, 1.6cqw); }
+    .a-todos em { margin-left: auto; font-style: normal; font-size: max(9px, 1.2cqw); padding: 0.1cqw 1cqw; border-radius: 99px; background: var(--ice); color: var(--blue-6); }
+    .a-cb { display: grid; place-items: center; flex: none; width: 3cqw; aspect-ratio: 1; border-radius: 0.9cqw; background: #e9f0fa; box-shadow: inset 0 0.3cqw 0.4cqw rgb(10 40 100 / 0.15); }
+    .a-cb svg { width: 75%; height: 75%; fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+    .a-cb.on { background: radial-gradient(circle at 35% 30%, #5ee0a0, #16a36a); box-shadow: inset 0 -0.3cqw 0 rgb(0 0 0 / 0.15); }
+    .a-dls { display: flex; flex-wrap: wrap; gap: 1.2cqw; margin-top: 0.4cqw; }
+    .a-dl { display: inline-flex; align-items: center; gap: 0.8cqw; padding: 1cqw 1.8cqw; border-radius: 99px; font-size: max(10px, 1.45cqw); font-weight: 700; box-shadow: inset 0 -0.5cqw 0 rgb(0 0 0 / 0.14), 0 0.8cqw 0 var(--dl-edge), 0 2cqw 3cqw -1cqw rgb(11 50 140 / 0.35); }
+    .a-dl .icon { width: max(12px, 1.7cqw); height: max(12px, 1.7cqw); }
+    .a-dl-primary { --dl-edge: #0636a8; background: var(--blue); color: #fff; }
+    .a-dl-ghost { --dl-edge: #cddcf0; background: #fff; color: var(--blue-6); }
+
+    @media (max-width: 767px) {
+      .a-machine { width: 58cqw; gap: 3cqw; padding: 4cqw; border-radius: 7cqw; }
+      .a-slot { width: 30cqw; height: 3cqw; }
+      .a-brand { font-size: 15px; }
+      .a-dome { width: 26cqw; }
+      .a-status { font-size: 11px; padding: 3px 9px; gap: 4px; }
+      .a-file { width: 62cqw; padding: 3cqw; gap: 1cqw 3cqw; border-radius: 5cqw; }
+      .a-file-ic { width: 11cqw; border-radius: 3cqw; }
+      .a-file b { font-size: 12px; } .a-file small { font-size: 11px; }
+      .a-wave { width: 96cqw; height: 16cqw; gap: 0.7cqw; padding: 3cqw; }
+      .a-head { width: 1.2cqw; height: 22cqw; }
+      .a-buddy, .a-ball { width: 22cqw; }
+      .a-ball .num { width: 7cqw; font-size: 11px; }
+      .a-tag { font-size: 11px; padding: 2px 8px; gap: 4px; }
+      .a-tag em { display: none; }
+      .a-bubble { width: 72cqw; padding: 2.6cqw 3.4cqw; border-radius: 4cqw; gap: 1cqw; }
+      .a-bubble::before { left: -2.8cqw; top: 3.6cqw; border-width: 1.8cqw; border-right-width: 2cqw; }
+      .a-ts { font-size: 11px; gap: 2cqw; }
+      .a-say { font-size: 13px; }
+      .a-note { width: 96cqw; gap: 2.6cqw; padding: 5cqw; border-radius: 6cqw; }
+      .a-note-head { font-size: 11px; }
+      .a-note h3 { font-size: 16px; }
+      .a-points li, .a-todos li { font-size: 12.5px; }
+      .a-points li { padding-left: 4cqw; } .a-points li::before { width: 2cqw; height: 2cqw; }
+      .a-sub { font-size: 11px; }
+      .a-todos { gap: 2cqw; } .a-todos li { gap: 2.4cqw; } .a-todos em { font-size: 10px; }
+      .a-cb { width: 6cqw; border-radius: 1.8cqw; }
+      .a-dls { gap: 2cqw; }
+      .a-dl { font-size: 11.5px; padding: 2cqw 3.4cqw; gap: 1.6cqw; }
+    }
+  </style>
+</head>
+<body>
+  <header class="proto-bar"><a href="index.html">← เลือกแบบ</a><nav class="bd-switch" aria-label="ตัวละครผู้พูด"><a href="buddies.html">ตัวละคร:</a><a href="?buddy=mochi">Mochi</a><a href="?buddy=mic">Mic-chan</a><a href="?buddy=bubbly">Bubbly</a><a href="?buddy=sprout">Sprout</a></nav></header>
+
+  <section class="story">
+    <div class="stage">
+      <div class="copy">
+        <p class="kicker"><span>ผลงานจริง 03</span>Transcripto</p>
+        <h2 class="title">ประชุมจบ<br>สรุปก็พร้อม</h2>
+        <p class="lead">อัปโหลดไฟล์เสียงประชุม ระบบแยกผู้พูด ถอดเสียงพร้อมเวลา แล้วสรุปประเด็นกับสิ่งที่ต้องทำให้อ่านจบในไม่กี่นาที</p>
+        <ol class="steps" aria-label="ขั้นตอนการทำงาน">
+          <li data-step-at="0"><b>01</b>อัปโหลดเสียง</li>
+          <li data-step-at="2.5"><b>02</b>แยกผู้พูด</li>
+          <li data-step-at="5"><b>03</b>ถอดเสียง</li>
+          <li data-step-at="8.5"><b>04</b>สรุปประชุม</li>
+        </ol>
+      </div>
+
+      <div class="art" aria-hidden="true">
+        <span class="blob" style="left:78%;top:4%"></span>
+        <span class="blob b2" style="left:4%;top:78%"></span>
+
+        <div class="a-machine" data-o="machine">
+          <span class="a-slot"></span>
+          <p class="a-brand">Transcrip<span>to</span></p>
+          <div class="a-dome">
+            <svg class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="fill" data-o="ring" cx="50" cy="50" r="44" pathLength="1"/></svg>
+            <span class="a-mic"><svg class="icon"><use href="#i-mic"/></svg></span>
+          </div>
+          <p class="a-status" data-o="status"><svg class="icon"><use href="#i-check"/></svg>ถอดเสียงเสร็จแล้ว</p>
+        </div>
+
+        <div class="a-file clay" data-o="file">
+          <span class="a-file-ic"><svg class="icon"><use href="#i-music"/></svg></span>
+          <b>ประชุมทีม_Q4.m4a</b>
+          <small>12 MB · 45:12</small>
+        </div>
+
+        <div class="a-wave clay" data-o="wave"></div>
+        <span class="a-head" data-o="head"></span>
+
+        <div class="a-buddy s1" data-o="buddy1">
+          <span class="a-ball" data-o="ball1"><b class="num">1</b></span>
+          <span class="a-tag clay">ผู้พูด 1<em data-o="pct1">38%</em></span>
+        </div>
+        <div class="a-buddy s2" data-o="buddy2">
+          <span class="a-ball" data-o="ball2"><b class="num">2</b></span>
+          <span class="a-tag clay">ผู้พูด 2<em data-o="pct2">27%</em></span>
+        </div>
+        <div class="a-buddy s3" data-o="buddy3">
+          <span class="a-ball" data-o="ball3"><b class="num">3</b></span>
+          <span class="a-tag clay"><span data-o="name3">ผู้พูด 3</span><svg class="icon" data-o="pencil"><use href="#i-pencil"/></svg><em data-o="pct3">35%</em></span>
+        </div>
+
+        <div class="a-bubble clay s1" data-o="bubble1"><p class="a-ts"><b>00:00</b><span>ผู้พูด 1</span></p><p class="a-say" data-o="say1">งบการตลาดไตรมาสนี้ ขอเพิ่มอีก 15% นะคะ</p></div>
+        <div class="a-bubble clay s2" data-o="bubble2"><p class="a-ts"><b>00:13</b><span>ผู้พูด 2</span></p><p class="a-say" data-o="say2">ถ้าเพิ่ม ต้องเลื่อน เปิดตัวสินค้า ไปพฤศจิกา</p></div>
+        <div class="a-bubble clay s3" data-o="bubble3"><p class="a-ts"><b>00:21</b><span data-o="bubbleName3">ผู้พูด 3</span></p><p class="a-say" data-o="say3">งั้นขอ ตัวเลขประกอบ ภายในศุกร์นี้</p></div>
+
+        <div class="a-note clay" data-o="note">
+          <p class="a-note-head"><span><svg class="icon"><use href="#i-sparkle"/></svg>สรุปการประชุม</span>3 ผู้พูด · 45 นาที</p>
+          <h3 data-o="noteTitle">วางแผนงบการตลาดไตรมาส 4</h3>
+          <ul class="a-points">
+            <li data-o="pt1">พิจารณาเพิ่มงบการตลาด 15%</li>
+            <li data-o="pt2">อาจเลื่อนเปิดตัวสินค้าเป็น พ.ย.</li>
+          </ul>
+          <p class="a-sub" data-o="sub">สิ่งที่ต้องทำต่อ</p>
+          <ul class="a-todos">
+            <li data-o="td1"><span class="a-cb" data-o="cb1"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7"/></svg></span>เตรียมตัวเลขประกอบ<em>ศุกร์</em></li>
+            <li data-o="td2"><span class="a-cb" data-o="cb2"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7"/></svg></span>ประเมินผลกระทบไทม์ไลน์</li>
+            <li data-o="td3"><span class="a-cb" data-o="cb3"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7"/></svg></span>นัดประชุมตัดสินใจรอบถัดไป</li>
+          </ul>
+          <div class="a-dls">
+            <span class="a-dl a-dl-primary" data-o="dl1"><svg class="icon"><use href="#i-download"/></svg>ดาวน์โหลดสรุป</span>
+            <span class="a-dl a-dl-ghost" data-o="dl2"><svg class="icon"><use href="#i-file"/></svg>ทรานสคริปต์ .txt</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="after"><p>ฉากถัดไป · Synergy Connect</p></section>
+
+  <script src="../vendor/gsap.min.js"></script>
+  <script src="../vendor/ScrollTrigger.min.js"></script>
+  <script src="shared.js"></script>
+  <script src="buddies.js"></script>
+  <script>
+    (function () {
+      var O = function (n) { return document.querySelector('[data-o="' + n + '"]'); };
+      var OO = function (a) { return a.map(O); };
+
+      // waveform bars coloured by who is speaking (three speakers take turns)
+      var wave = O('wave');
+      var pattern = [[1, 9], [2, 7], [3, 8], [1, 6], [3, 5], [2, 6], [1, 4]];
+      var bars = [];
+      pattern.forEach(function (p) {
+        for (var i = 0; i < p[1]; i++) {
+          var el = document.createElement('i');
+          el.style.setProperty('--h', (0.28 + 0.72 * Math.abs(Math.sin(bars.length * 1.7) * Math.cos(bars.length * 0.45))).toFixed(2));
+          el.dataset.s = p[0];
+          wave.appendChild(el);
+          bars.push(el);
+        }
+      });
+      var speakerColor = { 1: '#0b5cff', 2: '#0ea5a4', 3: '#8a4fff' };
+      var says = [TX.words(O('say1')), TX.words(O('say2')), TX.words(O('say3'))];
+      var buddyStyle = new URLSearchParams(location.search).get('buddy') || 'mochi';
+      var balls = [O('ball1'), O('ball2'), O('ball3')];
+      balls.forEach(function (ball, i) { ball.insertAdjacentHTML('afterbegin', TXB.markup(buddyStyle, i)); });
+      document.querySelectorAll('.bd-switch a[href^="?buddy="]').forEach(function (a) { if (a.getAttribute('href') === '?buddy=' + buddyStyle) a.setAttribute('aria-current', 'true'); });
+
+      TX.run(function (tl, env) {
+        var m = env.mobile;
+        // [left %, top %, scale]
+        var at = function (p, extra) { return Object.assign({ left: p[0] + '%', top: p[1] + '%', scale: p[2] == null ? 1 : p[2] }, extra || {}); };
+        var P = m ? {
+          machine: [[21, 22], [0, 0, 0.45]],
+          file: [[19, -30, 1], [19, 16, 1]],
+          wave: [2, 29],
+          head: [2, 86],
+          buddies: [[[6, 50], [39, 50], [72, 50]], [[0, 4, 0.62], [0, 30, 0.62], [0, 56, 0.62]], [[2, 84, 0.45], [16, 84, 0.45], [30, 84, 0.45]]],
+          bubbles: [[26, 4], [26, 30], [26, 56]],
+          waveLow: [2, 89, 0.9],
+          note: [2, 3]
+        } : {
+          machine: [[35, 27], [1, 1, 0.6]],
+          file: [[38, -34, 1], [38, 18, 1]],
+          wave: [6, 36],
+          head: [6, 80],
+          buddies: [[[14, 56], [44, 56], [74, 56]], [[2, 6, 0.78], [2, 30, 0.78], [2, 54, 0.78]], [[3, 76, 0.62], [13, 76, 0.62], [23, 76, 0.62]]],
+          bubbles: [[19, 7], [19, 31], [19, 55]],
+          waveLow: [6, 88, 0.92],
+          note: [37, 5]
+        };
+        var buddies = OO(['buddy1', 'buddy2', 'buddy3']);
+        balls.forEach(TXB.init);
+        var bubbles = OO(['bubble1', 'bubble2', 'bubble3']);
+
+        /* 01 · upload — a clay file drops into the Transcripto machine */
+        gsap.set(O('machine'), at(P.machine[0]));
+        gsap.set(O('ring'), { strokeDashoffset: 1 });
+        gsap.set(O('status'), { autoAlpha: 0, scale: 0.6 });
+        tl.fromTo(O('file'), at(P.file[0], { rotate: -24 }), at(P.file[1], { rotate: 6, duration: 0.9, ease: 'power2.in', immediateRender: true }), 0.1);
+        tl.to(O('file'), { rotate: 0, scaleY: 0.8, scaleX: 1.08, duration: 0.18, ease: 'power1.out' }, 1);
+        tl.to(O('file'), { y: m ? 30 : 60, scale: 0.35, autoAlpha: 0, duration: 0.35, ease: 'power2.in' }, 1.18);
+        tl.to(O('machine'), { scaleY: 0.92, scaleX: 1.04, duration: 0.15, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.25);
+        tl.to(O('ring'), { strokeDashoffset: 0, duration: 0.9, ease: 'none' }, 1.3);
+        tl.to(O('status'), { autoAlpha: 1, scale: 1, duration: 0.3, ease: 'back.out(2.5)' }, 2.1);
+
+        /* 02 · speakers — the waveform unrolls and three buddies claim their parts */
+        tl.to(O('machine'), at(P.machine[1], { duration: 0.6, ease: 'power3.inOut' }), 2.5);
+        tl.fromTo(wave, at(P.wave, { scaleX: 0, autoAlpha: 0 }), at(P.wave, { scaleX: 1, autoAlpha: 1, duration: 0.5, ease: 'power3.out', immediateRender: true }), 2.7);
+        tl.fromTo(bars, { scaleY: 0.1 }, { scaleY: 1, stagger: 0.012, duration: 0.3, ease: 'back.out(2)', immediateRender: true }, 2.9);
+        buddies.forEach(function (b, i) {
+          tl.fromTo(b, at(P.buddies[0][i], { y: m ? 40 : 60, autoAlpha: 0 }), at(P.buddies[0][i], { y: 0, autoAlpha: 1, duration: 0.3, ease: 'power3.out', immediateRender: true }), 3.2 + i * 0.12);
+          TXB.pop(tl, balls[i], 3.22 + i * 0.12);
+        });
+        var colourAt = 3.8;
+        [1, 2, 3].forEach(function (s, i) {
+          var mine = bars.filter(function (b) { return +b.dataset.s === s; });
+          tl.to(mine, { backgroundColor: speakerColor[s], stagger: 0.015, duration: 0.2, ease: 'none' }, colourAt + i * 0.35);
+          TXB.hop(tl, balls[i], colourAt + i * 0.35);
+          tl.fromTo(O('pct' + s), { autoAlpha: 0, scale: 0.4 }, { autoAlpha: 1, scale: 1, duration: 0.25, ease: 'back.out(2.4)', immediateRender: true }, colourAt + 0.2 + i * 0.35);
+        });
+
+        /* 03 · transcript — buddies line up, each speech bubble is read word by word */
+        tl.to(O('machine'), { autoAlpha: 0, scale: 0.2, duration: 0.45, ease: 'back.in(1.6)' }, 5);
+        tl.to(wave, at(P.waveLow, { duration: 0.6, ease: 'power2.inOut' }), 5);
+        buddies.forEach(function (b, i) { tl.to(b, at(P.buddies[1][i], { duration: 0.6, ease: 'power3.inOut' }), 5 + i * 0.05); });
+        gsap.set(O('head'), at(P.head));
+        tl.to(O('head'), { autoAlpha: 1, duration: 0.2 }, 5.5);
+        tl.to(O('head'), { left: m ? '96%' : '92%', duration: 2.9, ease: 'none' }, 5.5);
+        var talk = [[5.4, 6.4], [6.5, 7.4], [7.5, 8.2]];
+        bubbles.forEach(function (b, i) {
+          tl.fromTo(b, at(P.bubbles[i], { x: m ? -20 : -40, scale: 0.6, autoAlpha: 0 }), at(P.bubbles[i], { x: 0, scale: 1, autoAlpha: 1, duration: 0.35, ease: 'back.out(1.8)', immediateRender: true }), talk[i][0] - 0.15);
+          TXB.talk(tl, balls[i], talk[i][0], talk[i][1] - talk[i][0]);
+        });
+        var newName = TX.seg('คุณมาลี') || ['คุณมาลี'];
+        gsap.set(O('pencil'), { autoAlpha: 0, scale: 0.3 });
+        tl.to(O('pencil'), { autoAlpha: 1, scale: 1.3, rotate: -20, duration: 0.2, ease: 'back.out(2)' }, 8);
+        TXB.react(tl, balls[2], 8.1);
+        tl.to(O('pencil'), { scale: 1, rotate: 0, duration: 0.2 }, 8.35);
+        env.onTime(function (t) {
+          says.forEach(function (ws, i) {
+            var p = TX.progress(t, talk[i][0], talk[i][1]);
+            var hot = Math.min(Math.floor(p * ws.length), ws.length - 1);
+            ws.forEach(function (w, j) { w.classList.toggle('hot', p > 0 && p < 1 && j === hot); });
+          });
+          // the host renames "ผู้พูด 3" → "คุณมาลี"; the transcript follows
+          var r = TX.progress(t, 8.1, 8.45);
+          var label = r <= 0 ? 'ผู้พูด 3' : newName.slice(0, Math.max(1, Math.ceil(Math.min(1, r) * newName.length))).join('');
+          if (O('name3').textContent !== label) { O('name3').textContent = label; O('bubbleName3').textContent = label; }
+        });
+
+        /* 04 · summary — bubbles squish into a clay notebook that flips open */
+        bubbles.forEach(function (b, i) {
+          tl.to(b, { left: (m ? 30 : 50) + '%', top: (m ? 30 : 34) + '%', scale: 0.25, rotate: (i - 1) * 25, autoAlpha: 0, duration: 0.5, ease: 'power2.in' }, 8.5 + i * 0.08);
+        });
+        tl.to([wave, O('head')], { autoAlpha: 0, y: 20, duration: 0.4, ease: 'power2.in' }, 8.5);
+        buddies.forEach(function (b, i) { tl.to(b, at(P.buddies[2][i], { duration: 0.6, ease: 'power3.inOut' }), 8.6 + i * 0.05); });
+        gsap.set(O('note'), { transformPerspective: 1400 });
+        tl.fromTo(O('note'), at(P.note, { rotateY: -75, autoAlpha: 0, x: m ? 0 : -30 }), at(P.note, { rotateY: 0, autoAlpha: 1, x: 0, duration: 0.8, ease: 'back.out(1.2)', immediateRender: true }), 8.85);
+        var title = TX.typer(O('noteTitle'));
+        env.onTime(function (t) { title(TX.progress(t, 9.3, 9.9)); });
+        tl.fromTo(OO(['pt1', 'pt2', 'sub', 'td1', 'td2', 'td3']), { autoAlpha: 0, x: -14 }, { autoAlpha: 1, x: 0, stagger: 0.18, duration: 0.3, ease: 'power3.out', immediateRender: true }, 9.9);
+        gsap.set(OO(['cb1', 'cb2', 'cb3']).map(function (c) { return c.querySelector('path'); }), { strokeDashoffset: 1 });
+        [1, 2, 3].forEach(function (n, i) {
+          var cb = O('cb' + n);
+          tl.to(cb, { backgroundColor: '#1fb574', boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.15)', scale: 1.2, duration: 0.15, ease: 'power2.out' }, 10.9 + i * 0.3);
+          tl.to(cb.querySelector('path'), { strokeDashoffset: 0, duration: 0.2, ease: 'power2.out' }, 10.95 + i * 0.3);
+          tl.to(cb, { scale: 1, duration: 0.15 }, 11.1 + i * 0.3);
+        });
+        tl.fromTo(OO(['dl1', 'dl2']), { autoAlpha: 0, y: 20, scale: 0.6 }, { autoAlpha: 1, y: 0, scale: 1, stagger: 0.15, duration: 0.35, ease: 'back.out(2.4)', immediateRender: true }, 11.9);
+        balls.forEach(function (ball, i) { TXB.cheer(tl, ball, 12.2 + i * 0.12); });
+        tl.to({}, { duration: 0.6 }, 13);
+      });
+    })();
+  </script>
+</body>
+</html>

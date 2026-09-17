@@ -74,8 +74,7 @@ svg.i.fill{fill:currentColor}
 
 /* ---------- brand ---------- */
 .brand{display:inline-flex;align-items:center;gap:10px;font:600 20px/1 var(--font-display);letter-spacing:-.01em;color:inherit;text-decoration:none;border-radius:8px}
-.brand-mark{width:32px;height:32px;border-radius:9px;background:#0B1716;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);display:grid;place-items:center;flex:none}
-.brand-mark svg{width:26px;height:26px}
+.brand-mark{display:block;width:32px;height:32px;flex:none}
 
 /* ---------- login ---------- */
 .login{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr)}
@@ -200,7 +199,7 @@ svg.i.fill{fill:currentColor}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .chip .n{font:500 12px/1 var(--font-mono);opacity:.75}
 .jobs{margin:12px 0 0;padding:0;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden}
-.job{display:grid;grid-template-columns:136px minmax(0,1fr) minmax(220px,300px) 188px;gap:20px;align-items:center;padding:14px 20px 14px 14px;border-top:1px solid var(--line)}
+.job{display:grid;grid-template-columns:136px minmax(0,1fr) minmax(190px,260px) minmax(280px,max-content);gap:20px;align-items:center;padding:14px 20px 14px 14px;border-top:1px solid var(--line)}
 .job:first-child{border-top:0}
 .job.is-new{animation:rowIn .4s var(--ease-out)}
 @keyframes rowIn{from{opacity:0;transform:translateY(-8px);background:var(--brand-soft)}}
@@ -221,7 +220,7 @@ a.job-title:hover{text-decoration:underline;text-underline-offset:3px}
 .pipe-label{font-size:13px;color:var(--ink-2);line-height:1.45}
 .pipe-label .mono{font-size:12.5px}
 .job-err{font-size:13px;color:var(--err);line-height:1.5}
-.job-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.job-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;min-width:0}
 .pill{display:inline-flex;align-items:center;gap:6px;height:26px;width:max-content;padding:0 10px 0 8px;border-radius:99px;font-size:13px;font-weight:500;white-space:nowrap}
 .pill svg.i{width:14px;height:14px;stroke-width:2.2}
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
@@ -524,12 +523,6 @@ mark{background:color-mix(in oklab,var(--warn) 30%,transparent);color:inherit;bo
 .view-enter .side{animation:slideInR .55s var(--ease-out) .1s both}
 .job{animation:rise .45s var(--ease-out) both;animation-delay:var(--d,0ms)}
 
-/* login: brand mark behaves like a level meter */
-.login-stage .brand-mark rect,.brand:hover .brand-mark rect{transform-box:fill-box;transform-origin:center;animation:markEq 1.1s ease-in-out infinite}
-.brand-mark rect:nth-child(2){animation-delay:-.3s!important}
-.brand-mark rect:nth-child(3){animation-delay:-.6s!important}
-.brand-mark rect:nth-child(4){animation-delay:-.15s!important}
-@keyframes markEq{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.45)}}
 .input-wrap>svg.i{transition:color .2s,transform .3s var(--ease-spring)}
 .input-wrap:focus-within>svg.i{color:var(--brand);transform:scale(1.12)}
 .shake{animation:shake .42s cubic-bezier(.36,.07,.19,.97)}
@@ -657,9 +650,6 @@ html[data-style="minimal"] .vol::-webkit-slider-runnable-track{background:linear
 html[data-style="minimal"] .vol::-moz-range-progress{background:#0A74DA}
 html[data-style="minimal"] .chip-ind{background:var(--brand)}
 html[data-style="minimal"] .me-av{background:var(--brand);color:#FFFFFF}
-html[data-style="minimal"] .brand-mark{background:#0A74DA;box-shadow:none}
-html[data-style="minimal"] .brand-mark rect{fill:#FFFFFF}
-html[data-style="minimal"] .brand-mark rect:nth-child(odd){fill-opacity:.7}
 html[data-style="minimal"] .drop:hover{background:#FAFCFF}
 html[data-style="minimal"] :is(.scrub,.vol)::-moz-range-thumb{background:#0A74DA}
 @media (max-width:860px){ html[data-style="minimal"] .login-stage{border-right:0;border-bottom:1px solid var(--line)} }

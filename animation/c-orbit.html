@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcripto · C · Voice Orbit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* C · Voice Orbit — a 3D ring of sound, speaker orbs in orbit, a transcript carousel that folds into a summary */
+    :root { --bg: #eef1fe; }
+    .stage::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(35% 45% at 70% 35%, rgb(34 195 243 / 0.2), transparent 70%), radial-gradient(35% 45% at 45% 80%, rgb(138 79 255 / 0.16), transparent 70%), radial-gradient(30% 40% at 95% 90%, rgb(11 92 255 / 0.12), transparent 70%); }
+    .glass { background: linear-gradient(160deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.62)); border: 1px solid rgb(255 255 255 / 0.9); box-shadow: 0 2.4cqw 6cqw -2cqw rgb(40 50 140 / 0.35), inset 0 1px 0 #fff; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+    .s1 { --c: var(--s1); } .s2 { --c: var(--s2); } .s3 { --c: var(--s3); }
+
+    /* ring of sound */
+    .c-ring { width: 40cqw; aspect-ratio: 1; perspective: 900px; transform-origin: 0 0; z-index: 2; }
+    .c-disc { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(64deg); }
+    .c-disc::before { content: ""; position: absolute; inset: 14%; border-radius: 50%; background: radial-gradient(circle, rgb(11 92 255 / 0.2), rgb(34 195 243 / 0.08) 60%, transparent 70%); box-shadow: 0 0 0 0.5cqw rgb(255 255 255 / 0.7); }
+    .c-disc i { position: absolute; left: 50%; top: 50%; width: 1.1cqw; height: calc(1.2cqw + 7cqw * var(--lv, 0.3)); margin-left: -0.55cqw; border-radius: 99px; background: var(--bar, #b9c6e6); transform-origin: 50% 100%; transform: rotateZ(var(--a)) translateY(calc(-17cqw)) rotateX(-90deg) translateY(-100%); }
+    .c-core { position: absolute; left: 50%; top: 47%; width: 12cqw; aspect-ratio: 1; translate: -50% -50%; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 35% 28%, #fff, #bfe3ff 35%, var(--blue) 75%, #0638a8); color: #fff; box-shadow: 0 0 4cqw rgb(34 195 243 / 0.55), inset 0 -0.8cqw 1.2cqw rgb(0 0 0 / 0.25); }
+    .c-core .icon { width: 42%; height: 42%; }
+
+    .c-orb { left: 0; top: 0; width: 7cqw; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 32% 26%, #fff, color-mix(in srgb, var(--c) 30%, #fff) 30%, var(--c) 72%, color-mix(in srgb, var(--c) 60%, #000)); color: #fff; font-family: var(--font-d); font-weight: 800; font-size: max(11px, 2cqw); box-shadow: 0 1.4cqw 2.4cqw -0.8cqw color-mix(in srgb, var(--c) 70%, #000), inset 0 -0.6cqw 1cqw rgb(0 0 0 / 0.2); will-change: transform; }
+    .c-orb.talk { box-shadow: 0 0 0 0.8cqw color-mix(in srgb, var(--c) 30%, transparent), 0 0 4cqw var(--c), inset 0 -0.6cqw 1cqw rgb(0 0 0 / 0.2); }
+
+    .c-file { width: 26cqw; display: grid; grid-template-columns: auto 1fr; gap: 0.2cqw 1.2cqw; align-items: center; padding: 1.2cqw 1.6cqw; border-radius: 1.8cqw; z-index: 6; }
+    .c-file span { grid-row: span 2; display: grid; place-items: center; width: 4.6cqw; aspect-ratio: 1; border-radius: 1.2cqw; background: var(--blue); color: #fff; }
+    .c-file span .icon { width: 55%; height: 55%; }
+    .c-file b { font-family: var(--font-d); font-size: max(10px, 1.5cqw); }
+    .c-file small { font-size: max(9px, 1.2cqw); color: var(--muted); }
+    .c-status { display: inline-flex; align-items: center; gap: 0.8cqw; padding: 0.7cqw 1.6cqw; border-radius: 99px; color: #0b6b40; font-size: max(10px, 1.45cqw); font-weight: 700; z-index: 5; }
+    .c-status .icon { width: max(11px, 1.6cqw); height: max(11px, 1.6cqw); stroke-width: 3; }
+
+    .c-legend { width: 38cqw; display: grid; gap: 1.4cqw; padding: 2.2cqw; border-radius: 2.4cqw; z-index: 4; }
+    .c-legend h3 { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--font-d); font-size: max(12px, 1.9cqw); }
+    .c-legend h3 small { font-family: var(--font-b); font-weight: 500; font-size: max(9px, 1.2cqw); color: var(--muted); }
+    .c-who { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.6cqw 1.2cqw; font-size: max(10px, 1.45cqw); }
+    .c-who i { width: 2.4cqw; aspect-ratio: 1; border-radius: 50%; background: var(--c); }
+    .c-who b { display: inline-flex; align-items: center; gap: 0.6cqw; font-weight: 600; }
+    .c-who b .icon { width: max(10px, 1.4cqw); height: max(10px, 1.4cqw); color: var(--blue); }
+    .c-who em { font-style: normal; font-family: var(--font-d); font-weight: 700; color: color-mix(in srgb, var(--c) 85%, #000); }
+    .c-who .bar { grid-column: 2 / 4; height: 0.8cqw; border-radius: 99px; background: rgb(10 17 51 / 0.07); overflow: hidden; }
+    .c-who .bar u { display: block; height: 100%; width: var(--w); border-radius: inherit; background: var(--c); transform-origin: left; }
+
+    /* transcript carousel */
+    .c-carousel { width: 58cqw; height: 30cqw; perspective: 1500px; z-index: 4; }
+    .c-cyl { position: absolute; inset: 0; transform-style: preserve-3d; }
+    .c-card { position: absolute; left: 7cqw; right: 7cqw; top: 0; display: grid; gap: 1.2cqw; padding: 2.4cqw 2.8cqw; border-radius: 2.4cqw; backface-visibility: hidden; transition: opacity 200ms; background: linear-gradient(160deg, #fff, #f4f7ff); }
+    .c-card.dim { opacity: 0.4; }
+    .c-card header { display: flex; align-items: center; gap: 1cqw; font-size: max(10px, 1.35cqw); color: var(--muted); }
+    .c-card header time { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; color: var(--text-2); }
+    .c-card header b { display: inline-flex; align-items: center; gap: 0.6cqw; color: color-mix(in srgb, var(--c) 85%, #000); }
+    .c-card header b::before { content: ""; width: 1.2cqw; aspect-ratio: 1; border-radius: 50%; background: var(--c); }
+    .c-card p { font-size: max(12px, 2.3cqw); line-height: 1.55; font-weight: 500; }
+    .c-mini { display: flex; align-items: center; gap: 0.35cqw; height: 3cqw; }
+    .c-mini i { flex: 1; height: calc(var(--h) * 100%); border-radius: 99px; background: color-mix(in srgb, var(--c) 45%, #fff); }
+    .w { border-radius: 0.5cqw; padding: 0 0.08em; }
+    .w.hot { background: color-mix(in srgb, var(--c) 24%, #fff); color: color-mix(in srgb, var(--c) 85%, #000); }
+
+    .c-timeline { width: 58cqw; display: grid; gap: 1cqw; padding: 1.6cqw 2.2cqw 2cqw; border-radius: 2.2cqw; z-index: 4; }
+    .c-tl-head { display: flex; justify-content: space-between; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: max(9px, 1.25cqw); color: var(--muted); }
+    .c-tl-head b { font-weight: 600; color: var(--navy); }
+    .c-lanes { position: relative; display: grid; gap: 0.8cqw; }
+    .c-lane { position: relative; height: 1.7cqw; border-radius: 99px; background: rgb(10 17 51 / 0.06); }
+    .c-lane i { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: color-mix(in srgb, var(--c) 70%, #fff); }
+    .c-playhead { position: absolute; top: -0.7cqw; bottom: -0.7cqw; left: 2%; width: 0.35cqw; border-radius: 99px; background: var(--navy); box-shadow: 0 0 0 0.3cqw #fff; }
+
+    /* summary that unfolds */
+    .c-sheet { width: 62cqw; display: grid; z-index: 5; }
+    .c-fold { display: grid; gap: 1.2cqw; padding: 2cqw 2.8cqw; background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(255 255 255 / 0.86)); border: 1px solid #fff; transform-origin: 50% 0; }
+    .c-fold:first-child { border-radius: 2.6cqw 2.6cqw 0 0; padding-top: 2.6cqw; }
+    .c-fold:last-child { border-radius: 0 0 2.6cqw 2.6cqw; padding-bottom: 2.6cqw; box-shadow: 0 3cqw 7cqw -2cqw rgb(40 50 140 / 0.4); }
+    .c-fold + .c-fold { border-top: 1px dashed #d7def0; }
+    .c-sheet-head { display: flex; justify-content: space-between; align-items: center; font-size: max(10px, 1.35cqw); color: var(--muted); }
+    .c-sheet-head span { display: inline-flex; align-items: center; gap: 0.8cqw; font-weight: 700; color: var(--blue-6); }
+    .c-sheet-head .icon { width: max(12px, 1.8cqw); height: max(12px, 1.8cqw); }
+    .c-sheet h3 { min-height: 1.3em; font-family: var(--font-d); font-size: max(14px, 2.4cqw); line-height: 1.3; }
+    .c-points { display: grid; gap: 0.7cqw; }
+    .c-points li { position: relative; padding-left: 2.2cqw; font-size: max(11px, 1.6cqw); color: var(--text-2); }
+    .c-points li::before { content: ""; position: absolute; left: 0; top: 0.75em; width: 1cqw; aspect-ratio: 1; border-radius: 50%; background: var(--cyan); translate: 0 -50%; }
+    .c-todos { display: grid; gap: 0.8cqw; }
+    .c-todos li { display: flex; align-items: center; gap: 1.2cqw; font-size: max(11px, 1.6cqw); }
+    .c-cb { display: grid; place-items: center; width: 2.6cqw; aspect-ratio: 1; border-radius: 50%; background: #e3f7ee; }
+    .c-cb svg { width: 72%; height: 72%; fill: none; stroke: #0f9d63; stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+    .c-dls { display: flex; flex-wrap: wrap; gap: 1.2cqw; padding-top: 0.4cqw; }
+    .c-dl { display: inline-flex; align-items: center; gap: 0.8cqw; padding: 0.9cqw 1.8cqw; border-radius: 99px; font-size: max(10px, 1.45cqw); font-weight: 700; color: var(--blue-6); background: #fff; box-shadow: 0 0 0 1px #c9d8f5; }
+    .c-dl.primary { background: var(--blue); color: #fff; box-shadow: 0 1cqw 2.4cqw -1cqw rgb(11 92 255 / 0.7); }
+    .c-dl .icon { width: max(12px, 1.7cqw); height: max(12px, 1.7cqw); }
+
+    @media (max-width: 767px) {
+      .c-ring { width: 72cqw; }
+      .c-disc i { width: 1.8cqw; margin-left: -0.9cqw; height: calc(2cqw + 11cqw * var(--lv, 0.3)); transform: rotateZ(var(--a)) translateY(-30cqw) rotateX(-90deg) translateY(-100%); }
+      .c-core { width: 20cqw; }
+      .c-orb { width: 12cqw; font-size: 13px; }
+      .c-file { width: 64cqw; padding: 2.4cqw 3cqw; gap: 0.4cqw 2.4cqw; border-radius: 4cqw; } .c-file span { width: 10cqw; border-radius: 2.6cqw; }
+      .c-file b { font-size: 12px; } .c-file small { font-size: 10.5px; }
+      .c-status { font-size: 11.5px; padding: 4px 10px; gap: 4px; }
+      .c-legend { width: 92cqw; gap: 2.6cqw; padding: 4cqw; border-radius: 5cqw; }
+      .c-legend h3 { font-size: 14px; } .c-legend h3 small { font-size: 10.5px; }
+      .c-who { font-size: 12.5px; gap: 1cqw 2.4cqw; } .c-who i { width: 4cqw; } .c-who .bar { height: 1.6cqw; }
+      .c-carousel { width: 92cqw; height: 62cqw; }
+      .c-card { left: 4cqw; right: 4cqw; padding: 4cqw; gap: 2cqw; border-radius: 5cqw; }
+      .c-card header { font-size: 11px; gap: 2cqw; } .c-card header b::before { width: 2.4cqw; }
+      .c-card p { font-size: 14px; }
+      .c-mini { height: 7cqw; gap: 0.8cqw; }
+      .c-timeline { width: 92cqw; gap: 2cqw; padding: 3cqw 4cqw 3.6cqw; border-radius: 4cqw; } .c-tl-head { font-size: 10.5px; } .c-lanes { gap: 1.8cqw; } .c-lane { height: 3cqw; } .c-playhead { width: 0.7cqw; }
+      .c-sheet { width: 96cqw; }
+      .c-fold { gap: 2.4cqw; padding: 4cqw 5cqw; }
+      .c-fold:first-child { border-radius: 5cqw 5cqw 0 0; padding-top: 5cqw; } .c-fold:last-child { border-radius: 0 0 5cqw 5cqw; padding-bottom: 5cqw; }
+      .c-sheet-head { font-size: 11px; } .c-sheet h3 { font-size: 16px; }
+      .c-points li, .c-todos li { font-size: 12.5px; } .c-points li { padding-left: 4cqw; } .c-points li::before { width: 2cqw; }
+      .c-todos { gap: 2cqw; } .c-todos li { gap: 2.4cqw; } .c-cb { width: 5.6cqw; }
+      .c-dls { gap: 2cqw; } .c-dl { font-size: 11.5px; padding: 2cqw 3.4cqw; gap: 1.6cqw; }
+    }
+  </style>
+</head>
+<body>
+  <header class="proto-bar"><a href="index.html">← เลือกแบบ</a><span>C · Voice Orbit</span></header>
+
+  <section class="story">
+    <div class="stage">
+      <div class="copy">
+        <p class="kicker"><span>ผลงานจริง 03</span>Transcripto</p>
+        <h2 class="title">ประชุมจบ<br>สรุปก็พร้อม</h2>
+        <p class="lead">อัปโหลดไฟล์เสียงประชุม ระบบแยกผู้พูด ถอดเสียงพร้อมเวลา แล้วสรุปประเด็นกับสิ่งที่ต้องทำให้อ่านจบในไม่กี่นาที</p>
+        <ol class="steps" aria-label="ขั้นตอนการทำงาน">
+          <li data-step-at="0"><b>01</b>อัปโหลดเสียง</li>
+          <li data-step-at="2.5"><b>02</b>แยกผู้พูด</li>
+          <li data-step-at="5"><b>03</b>ถอดเสียง</li>
+          <li data-step-at="8.5"><b>04</b>สรุปประชุม</li>
+        </ol>
+      </div>
+
+      <div class="art" aria-hidden="true">
+        <div class="c-ring" data-o="ring">
+          <div class="c-disc" data-o="disc"></div>
+          <span class="c-core"><svg class="icon"><use href="#i-mic"/></svg></span>
+        </div>
+
+        <p class="c-file glass" data-o="file"><span><svg class="icon"><use href="#i-music"/></svg></span><b>ประชุมทีม_Q4.m4a</b><small>12 MB · 45:12</small></p>
+        <p class="c-status glass" data-o="status"><svg class="icon"><use href="#i-check"/></svg>ถอดเสียงเสร็จแล้ว</p>
+
+        <div class="c-legend glass" data-o="legend">
+          <h3>ผู้พูด <small>ตรวจพบ 3 คน</small></h3>
+          <p class="c-who s1" data-o="who1"><i></i><b>ผู้พูด 1</b><em>38%</em><span class="bar"><u style="--w:38%"></u></span></p>
+          <p class="c-who s2" data-o="who2"><i></i><b>ผู้พูด 2</b><em>27%</em><span class="bar"><u style="--w:27%"></u></span></p>
+          <p class="c-who s3" data-o="who3"><i></i><b><span data-o="name3">ผู้พูด 3</span><svg class="icon" data-o="pencil"><use href="#i-pencil"/></svg></b><em>35%</em><span class="bar"><u style="--w:35%"></u></span></p>
+        </div>
+
+        <div class="c-carousel" data-o="carousel">
+          <div class="c-cyl" data-o="cyl">
+            <article class="c-card glass s1" data-o="card1"><header><time>00:00</time><b>ผู้พูด 1</b></header><p data-o="say1">งบการตลาดไตรมาสนี้ ขอเพิ่มอีก 15% นะคะ</p><span class="c-mini"></span></article>
+            <article class="c-card glass s2" data-o="card2"><header><time>00:13</time><b>ผู้พูด 2</b></header><p data-o="say2">ถ้าเพิ่ม ต้องเลื่อน เปิดตัวสินค้า ไปพฤศจิกา</p><span class="c-mini"></span></article>
+            <article class="c-card glass s3" data-o="card3"><header><time>00:21</time><b>คุณมาลี</b></header><p data-o="say3">งั้นขอ ตัวเลขประกอบ ภายในศุกร์นี้</p><span class="c-mini"></span></article>
+          </div>
+        </div>
+
+        <div class="c-timeline glass" data-o="timeline">
+          <p class="c-tl-head"><b data-o="clock">00:00</b><span>45:12</span></p>
+          <div class="c-lanes">
+            <span class="c-lane s1"><i style="left:2%;width:14%"></i><i style="left:44%;width:10%"></i><i style="left:78%;width:8%"></i></span>
+            <span class="c-lane s2"><i style="left:17%;width:9%"></i><i style="left:56%;width:12%"></i><i style="left:88%;width:6%"></i></span>
+            <span class="c-lane s3"><i style="left:27%;width:15%"></i><i style="left:69%;width:8%"></i><i style="left:95%;width:4%"></i></span>
+            <span class="c-playhead" data-o="cHead"></span>
+          </div>
+        </div>
+
+        <div class="c-sheet" data-o="sheet">
+          <div class="c-fold" data-o="fold1">
+            <p class="c-sheet-head"><span><svg class="icon"><use href="#i-sparkle"/></svg>สรุปการประชุม</span>3 ผู้พูด · 45 นาที</p>
+            <h3 data-o="sumTitle">วางแผนงบการตลาดไตรมาส 4</h3>
+          </div>
+          <div class="c-fold" data-o="fold2">
+            <ul class="c-points"><li>พิจารณาเพิ่มงบการตลาด 15%</li><li>อาจเลื่อนเปิดตัวสินค้าเป็น พ.ย.</li></ul>
+          </div>
+          <div class="c-fold" data-o="fold3">
+            <ul class="c-todos">
+              <li><span class="c-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck1"/></svg></span>เตรียมตัวเลขประกอบภายในศุกร์</li>
+              <li><span class="c-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck2"/></svg></span>ประเมินผลกระทบไทม์ไลน์เปิดตัว</li>
+              <li><span class="c-cb"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7" data-o="ck3"/></svg></span>นัดประชุมตัดสินใจรอบถัดไป</li>
+            </ul>
+            <p class="c-dls"><span class="c-dl primary" data-o="dl1"><svg class="icon"><use href="#i-download"/></svg>ดาวน์โหลดสรุป</span><span class="c-dl" data-o="dl2"><svg class="icon"><use href="#i-file"/></svg>ทรานสคริปต์ .txt</span></p>
+          </div>
+        </div>
+
+        <span class="c-orb s1" data-o="orb1">1</span>
+        <span class="c-orb s2" data-o="orb2">2</span>
+        <span class="c-orb s3" data-o="orb3">3</span>
+      </div>
+    </div>
+  </section>
+  <section class="after"><p>ฉากถัดไป · Synergy Connect</p></section>
+
+  <script src="../vendor/gsap.min.js"></script>
+  <script src="../vendor/ScrollTrigger.min.js"></script>
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      var O = function (n) { return document.querySelector('[data-o="' + n + '"]'); };
+      var OO = function (a) { return a.map(O); };
+      var art = document.querySelector('.art');
+
+      // 48 bars around the ring; their colour later shows each speaker's share of talk time (38 / 27 / 35 %)
+      var disc = O('disc'), bars = [], N = 48;
+      for (var i = 0; i < N; i++) {
+        var b = document.createElement('i');
+        b.style.setProperty('--a', (i * 360 / N) + 'deg');
+        b.dataset.s = i < N * 0.38 ? 1 : i < N * 0.65 ? 2 : 3;
+        disc.appendChild(b); bars.push(b);
+      }
+      document.querySelectorAll('.c-mini').forEach(function (mini, k) {
+        for (var j = 0; j < 26; j++) { var e = document.createElement('i'); e.style.setProperty('--h', (0.25 + 0.75 * Math.abs(Math.sin(j * 1.3 + k) * Math.cos(j * 0.4))).toFixed(2)); mini.appendChild(e); }
+      });
+      var COLORS = { 1: '#0b5cff', 2: '#0ea5a4', 3: '#8a4fff' };
+      var says = [TX.words(O('say1')), TX.words(O('say2')), TX.words(O('say3'))];
+      var orbs = OO(['orb1', 'orb2', 'orb3']);
+
+      TX.run(function (tl, env) {
+        var m = env.mobile;
+        var at = function (p, extra) { return Object.assign({ left: p[0] + '%', top: p[1] + '%', scale: p[2] == null ? 1 : p[2] }, extra || {}); };
+        var P = m ? {
+          ring: [[14, 20], [14, 2, 0.8], [2, 0, 0.42]], file: [[18, -30], [18, 30]], status: [30, 70],
+          legend: [4, 54], carousel: [4, 26], timeline: [4, 62], sheet: [2, 3], orbTargets: [[8, 90], [22, 90], [36, 90]]
+        } : {
+          ring: [[30, 22], [8, 22], [1, 1, 0.52]], file: [[37, -30], [37, 42]], status: [38, 82],
+          legend: [56, 30], carousel: [36, 20], timeline: [36, 60], sheet: [31, 6], orbTargets: [[32, 84], [41, 84], [50, 84]]
+        };
+
+        /* 01 · upload — the file dives into the ring and the ring starts to listen */
+        gsap.set(O('ring'), at(P.ring[0]));
+        gsap.set(bars, { '--lv': 0, '--bar': '#b9c6e6' });
+        tl.fromTo(O('file'), at(P.file[0], { rotate: -12, autoAlpha: 0 }), at(P.file[1], { rotate: 0, autoAlpha: 1, duration: 0.8, ease: 'back.out(1.3)', immediateRender: true }), 0.1);
+        tl.to(O('file'), { scale: 0.1, autoAlpha: 0, y: m ? -20 : -40, duration: 0.45, ease: 'power2.in' }, 1.05);
+        tl.fromTo(O('status'), at(P.status, { autoAlpha: 0, y: 12 }), at(P.status, { autoAlpha: 1, y: 0, duration: 0.3, ease: 'back.out(2)', immediateRender: true }), 2);
+        var wave = { v: 0, amp: 0 };
+        tl.to(wave, { amp: 1, duration: 0.8, ease: 'power2.out' }, 1.3);
+        tl.to(wave, { v: 40, duration: 12, ease: 'none' }, 1.3);
+
+        /* 02 · speakers — three orbs rise into orbit; the ring splits into each voice's share */
+        tl.to(O('status'), { autoAlpha: 0, duration: 0.25 }, 2.5);
+        tl.to(O('ring'), at(P.ring[1], { duration: 0.7, ease: 'power3.inOut' }), 2.5);
+        [1, 2, 3].forEach(function (s, k) {
+          tl.to(bars.filter(function (b) { return +b.dataset.s === s; }), { '--bar': COLORS[s], stagger: 0.012, duration: 0.15, ease: 'none' }, 3.3 + k * 0.3);
+        });
+        tl.fromTo(O('legend'), at(P.legend, { autoAlpha: 0, y: 30 }), at(P.legend, { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: true }), 3.4);
+        tl.fromTo(O('legend').querySelectorAll('.bar u'), { scaleX: 0 }, { scaleX: 1, stagger: 0.3, duration: 0.4, ease: 'power2.out', immediateRender: true }, 3.5);
+        gsap.set(O('pencil'), { autoAlpha: 0, scale: 0.4 });
+        tl.to(O('pencil'), { autoAlpha: 1, scale: 1.25, rotate: -18, duration: 0.2, ease: 'back.out(2)' }, 4.4);
+        tl.to(O('pencil'), { scale: 1, rotate: 0, duration: 0.15 }, 4.65);
+
+        /* 03 · transcript — the ring retreats; a carousel of transcript cards turns to whoever is speaking */
+        tl.to(O('legend'), { autoAlpha: 0, y: -20, duration: 0.35, ease: 'power2.in' }, 5);
+        tl.to(O('ring'), at(P.ring[2], { duration: 0.7, ease: 'power3.inOut' }), 5);
+        var cyl = O('cyl'), cards = OO(['card1', 'card2', 'card3']);
+        var R = function () { return O('carousel').offsetWidth * (m ? 0.95 : 0.8); }; // far enough back that neighbours never cut across the front card
+        var STEP = 62; // degrees between cards: neighbours peek in at the sides
+        // cards sit on a cylinder: each (and the cylinder itself) turns around an axis R px behind the front card
+        cards.forEach(function (c, k) { gsap.set(c, { rotationY: k * STEP, transformOrigin: '50% 50% ' + (-R()) + 'px', z: 0 }); });
+        gsap.set(cyl, { transformOrigin: '50% 50% ' + (-R()) + 'px' });
+        tl.fromTo(O('carousel'), at(P.carousel, { autoAlpha: 0, y: 40 }), at(P.carousel, { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: true }), 5.2);
+        tl.fromTo(cyl, { rotationY: 30 }, { rotationY: 0, duration: 0.6, ease: 'power3.out', immediateRender: true }, 5.2);
+        tl.to(cyl, { rotationY: -STEP, duration: 0.5, ease: 'power3.inOut' }, 6.3);
+        tl.to(cyl, { rotationY: -2 * STEP, duration: 0.5, ease: 'power3.inOut' }, 7.3);
+        var talk = [[5.6, 6.3], [6.8, 7.3], [7.8, 8.4]];
+        tl.fromTo(O('timeline'), at(P.timeline, { autoAlpha: 0, y: 30 }), at(P.timeline, { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power3.out', immediateRender: true }), 5.35);
+        tl.fromTo(O('cHead'), { left: '2%' }, { left: '31%', duration: 3, ease: 'none', immediateRender: true }, 5.5);
+        tl.to(O('timeline'), { autoAlpha: 0, y: 20, duration: 0.35, ease: 'power2.in' }, 8.55);
+
+        /* 04 · summary — cards fold into one sheet that unfolds panel by panel */
+        tl.to(cyl, { rotationY: 0, duration: 0.5, ease: 'power2.inOut' }, 8.5);
+        tl.to(cards, { rotationY: 0, z: function (k) { return -k * 30; }, y: function (k) { return k * 10; }, duration: 0.5, ease: 'power2.inOut' }, 8.5);
+        tl.to(O('carousel'), { autoAlpha: 0, scale: 0.8, duration: 0.4, ease: 'power2.in' }, 8.95);
+        tl.to(O('ring'), { autoAlpha: 0, scale: m ? 0.3 : 0.35, duration: 0.4, ease: 'power2.in' }, 8.7);
+        gsap.set(O('sheet'), at(P.sheet));
+        var folds = OO(['fold1', 'fold2', 'fold3']);
+        gsap.set(folds, { transformPerspective: 1100 });
+        folds.forEach(function (f, k) {
+          tl.fromTo(f, { rotationX: -95, autoAlpha: 0 }, { rotationX: 0, autoAlpha: 1, duration: 0.55, ease: 'back.out(1.3)', immediateRender: true }, 9.1 + k * 0.45);
+        });
+        var title = TX.typer(O('sumTitle'));
+        gsap.set(OO(['ck1', 'ck2', 'ck3']), { strokeDashoffset: 1 });
+        tl.to(OO(['ck1', 'ck2', 'ck3']), { strokeDashoffset: 0, stagger: 0.3, duration: 0.25, ease: 'power2.out' }, 10.8);
+        tl.fromTo(OO(['dl1', 'dl2']), { autoAlpha: 0, scale: 0.6 }, { autoAlpha: 1, scale: 1, stagger: 0.15, duration: 0.3, ease: 'back.out(2.2)', immediateRender: true }, 11.8);
+        tl.to({}, { duration: 0.8 }, 12.3);
+
+        /* everything that is driven by time rather than tweens: bar levels, orbits, karaoke, rename */
+        var newName = TX.seg('คุณมาลี') || ['คุณมาลี'];
+        var arrive = function (k, t) { return Math.max(0, Math.min(1, TX.progress(t, 2.9 + k * 0.15, 3.5 + k * 0.15))); };
+        var ease = gsap.parseEase('power3.inOut');
+        env.onTime(function (t) {
+          // ring bars breathe with the audio
+          var amp = wave.amp;
+          bars.forEach(function (b, k) { b.style.setProperty('--lv', (amp * (0.2 + 0.8 * Math.abs(Math.sin(wave.v * 0.9 + k * 0.55) * Math.cos(wave.v * 0.35 + k * 0.21)))).toFixed(3)); });
+
+          // orbit centre follows the ring wherever it is
+          var rr = O('ring').getBoundingClientRect(), ar = art.getBoundingClientRect();
+          var cx = rr.left - ar.left + rr.width / 2, cy = rr.top - ar.top + rr.height * 0.5;
+          var rx = rr.width * 0.56, ry = rr.width * 0.56 * Math.cos(64 * Math.PI / 180) + rr.height * 0.04;
+          var talking = -1;
+          talk.forEach(function (w, k) { if (t >= w[0] && t < w[1]) talking = k; });
+          var toLine = ease(Math.max(0, Math.min(1, TX.progress(t, 8.7, 9.5))));
+          orbs.forEach(function (orb, k) {
+            var a = t * 0.9 + k * (Math.PI * 2 / 3);
+            var ox = cx + rx * Math.cos(a), oy = cy + ry * Math.sin(a);
+            var depth = Math.sin(a);
+            var rise = arrive(k, t);
+            oy += (1 - rise) * (m ? 40 : 70);
+            var tx = art.offsetWidth * P.orbTargets[k][0] / 100, ty = art.offsetHeight * P.orbTargets[k][1] / 100;
+            var x = ox + (tx - ox) * toLine, y = oy + (ty - oy) * toLine;
+            var s = (0.8 + 0.25 * depth) * (1 - toLine) + 1 * toLine;
+            if (talking === k) s *= 1.25;
+            gsap.set(orb, { x: x - orb.offsetWidth / 2, y: y - orb.offsetHeight / 2, scale: s * (0.3 + 0.7 * rise), autoAlpha: rise, zIndex: toLine > 0.5 ? 7 : depth > 0 ? 3 : 1 });
+            orb.classList.toggle('talk', talking === k);
+          });
+
+          // karaoke on the card in front, other cards dim
+          says.forEach(function (ws, k) {
+            var p = TX.progress(t, talk[k][0], talk[k][1]);
+            var hot = Math.min(Math.floor(p * ws.length), ws.length - 1);
+            ws.forEach(function (w, j) { w.classList.toggle('hot', p > 0 && p < 1 && j === hot); });
+          });
+          var front = t < 6.3 ? 0 : t < 7.3 ? 1 : 2;
+          cards.forEach(function (c, k) { c.classList.toggle('dim', t < 8.5 && k !== front); });
+
+          // rename speaker 3
+          var r = TX.progress(t, 4.5, 4.9);
+          var label = r <= 0 ? 'ผู้พูด 3' : newName.slice(0, Math.max(1, Math.ceil(Math.min(1, r) * newName.length))).join('');
+          if (O('name3').textContent !== label) O('name3').textContent = label;
+
+          title(TX.progress(t, 9.4, 10));
+          var sec = Math.round(Math.max(0, Math.min(1, TX.progress(t, 5.5, 8.5))) * 24);
+          O('clock').textContent = '00:' + String(sec).padStart(2, '0');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

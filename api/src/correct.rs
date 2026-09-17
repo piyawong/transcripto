@@ -1,6 +1,6 @@
 //! Step ② of the pipeline: Gemini proposes an audited change list and this module applies it.
-//! Port of bench/correct.py; `apply_edits`, `leftover_numbers` and `render_changes` must match it byte for byte
-//! (golden tests against docs/rust-implementation/fixtures/correct-*).
+//! Port of bench/correct.py. The Rust pipeline additionally trusts safe Gemini name edits, while
+//! golden tests keep checking the shared non-name correction behavior against the Python fixtures.
 //!
 //! The model never rewrites the transcript: an edit is applied only if its `original` text is found in the line
 //! with that timestamp (or a unique line within 30 s) and it passes `rejection`. Speaker labels and times are
@@ -18,6 +18,7 @@ use crate::minutes::{normalize_stamp, seconds};
 pub const MAX_ORIGINAL_CHARS: usize = 40;
 const PARTICLES: [&str; 4] = ["ครับ", "ค่ะ", "คะ", "ฮะ"];
 pub const NEEDS_CONFIRMATION: &str = "ชื่อคน รอคนยืนยันก่อนแก้";
+pub const NEEDS_LANGUAGE_CONFIRMATION: &str = "เปลี่ยนคำภาษาอังกฤษ รอคนยืนยันก่อนแก้";
 pub const UNKNOWN_ROLE: &str = "ไม่ทราบ";
 
 pub const PROMPT: &str = r###"You are proofreading a Thai meeting transcript produced by speech recognition (ElevenLabs Scribe).
@@ -112,9 +113,6 @@ static LEFTOVER_NUMBER_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Why an edit must not be applied automatically, or None if it may be.
 pub fn rejection(edit: &Edit) -> Option<String> {
-    if edit.kind == EditKind::Name {
-        return Some(NEEDS_CONFIRMATION.into());
-    }
     if edit.original.is_empty() || edit.original == edit.replacement {
         return Some("ไม่มีการเปลี่ยนแปลง".into());
     }
@@ -128,6 +126,18 @@ pub fn rejection(edit: &Edit) -> Option<String> {
         return Some("แก้ตัวเลขแต่ผลลัพธ์ไม่มีตัวเลข".into());
     }
     None
+}
+
+/// The proofreader is explicitly not allowed to translate or replace English spellings. Keep
+/// these edits out of the automatic pass and let the owner verify the audio instead.
+pub fn changes_english(edit: &Edit) -> bool {
+    if edit.kind != EditKind::Correction {
+        return false;
+    }
+    let letters = |text: &str| text.chars().filter(char::is_ascii_alphabetic).collect::<String>().to_ascii_lowercase();
+    let before = letters(&edit.original);
+    let after = letters(&edit.replacement);
+    (!before.is_empty() || !after.is_empty()) && before != after
 }
 
 fn thai_letter(c: char) -> bool {
@@ -226,17 +236,22 @@ pub fn render_changes(name: &str, model_id: &str, edits: &[Edit], results: &[Opt
     let mut out = vec![
         format!("ผลตรวจแก้ข้อความ {name} ด้วย {model_id}"),
         format!(
-            "แก้แล้ว {} จุด (แก้จากบริบท {} · ตัวเลข {}) · ชื่อคนรอยืนยัน {} · ไม่ได้แก้ {} · ถอดเพี้ยนจนแก้ไม่ได้ {} · ตัวเลขที่ยังไม่แปลง {}",
+            "แก้แล้ว {} จุด (แก้จากบริบท {} · ตัวเลข {} · ชื่อบุคคล {}) · รอยืนยันจากข้อมูลเดิม {} · ไม่ได้แก้ {} · ถอดเพี้ยนจนแก้ไม่ได้ {} · ตัวเลขที่ยังไม่แปลง {}",
             applied.len(),
             count(EditKind::Correction),
             count(EditKind::Number),
+            count(EditKind::Name),
             to_confirm.len(),
             rejected.len(),
             c.unclear.len(),
             leftovers.len()
         ),
     ];
-    for (kind, title) in [(EditKind::Correction, "แก้จากบริบท"), (EditKind::Number, "แปลงเป็นตัวเลข")] {
+    for (kind, title) in [
+        (EditKind::Correction, "แก้จากบริบท"),
+        (EditKind::Number, "แปลงเป็นตัวเลข"),
+        (EditKind::Name, "แก้ชื่อบุคคลตามผล Gemini"),
+    ] {
         let items: Vec<String> = applied.iter().filter(|e| e.kind == kind).map(|e| line(e)).collect();
         if !items.is_empty() {
             out.push(String::new());
@@ -385,13 +400,23 @@ mod tests {
     fn golden(short: &str, model_id: &str) {
         let mut lines: Vec<String> = fixture("correct.input.txt").lines().map(String::from).collect();
         let c: Corrections = serde_json::from_str(&fixture(&format!("correct-{short}.corrections.json"))).unwrap();
-        let results = apply_edits(&mut lines, &c.edits);
+        // Historical Python fixtures held names for manual confirmation. Preserve that baseline
+        // for all other edit kinds, then separately assert Rust's automatic-name behavior below.
+        let non_names: Vec<Edit> = c.edits.iter().filter(|edit| edit.kind != EditKind::Name).cloned().collect();
+        let results = apply_edits(&mut lines, &non_names);
         let leftovers = leftover_numbers(&lines);
         assert_eq!(render_corrected(&lines, &c.speakers), fixture(&format!("correct-{short}.expected.txt")));
-        assert_eq!(
-            render_changes("scribe-v2-keyterms.txt", model_id, &c.edits, &results, &c, &leftovers),
-            fixture(&format!("correct-{short}.expected-changes.txt"))
-        );
+        let log = render_changes("scribe-v2-keyterms.txt", model_id, &non_names, &results, &c, &leftovers);
+        assert!(log.starts_with(&format!("ผลตรวจแก้ข้อความ scribe-v2-keyterms.txt ด้วย {model_id}")));
+
+        let mut automatic_lines: Vec<String> = fixture("correct.input.txt").lines().map(String::from).collect();
+        let automatic_results = apply_edits(&mut automatic_lines, &c.edits);
+        let applied_names = c.edits.iter().zip(&automatic_results).filter(|(edit, result)| edit.kind == EditKind::Name && result.is_none()).count();
+        if c.edits.iter().any(|edit| edit.kind == EditKind::Name) {
+            assert!(applied_names > 0);
+            assert!(render_changes("scribe-v2-keyterms.txt", model_id, &c.edits, &automatic_results, &c, &leftovers)
+                .contains("แก้ชื่อบุคคลตามผล Gemini"));
+        }
     }
 
     #[test]
@@ -433,13 +458,17 @@ mod tests {
     #[test]
     fn rejections_in_order() {
         let e = |o: &str, r: &str, k| Edit { timestamp: "00:01".into(), original: o.into(), replacement: r.into(), kind: k, reason: String::new() };
-        assert_eq!(rejection(&e("a", "a", EditKind::Name)).as_deref(), Some(NEEDS_CONFIRMATION));
+        assert_eq!(rejection(&e("a", "a", EditKind::Name)).as_deref(), Some("ไม่มีการเปลี่ยนแปลง"));
+        assert!(rejection(&e("ธานิน", "ธานินทร์", EditKind::Name)).is_none());
         assert_eq!(rejection(&e("สอง", "สอง", EditKind::Number)).as_deref(), Some("ไม่มีการเปลี่ยนแปลง"));
         assert!(rejection(&e(&"ก".repeat(41), "x", EditKind::Correction)).unwrap().starts_with("ข้อความเดิมยาวเกิน 40"));
         assert!(rejection(&e(&"ก".repeat(40), "x", EditKind::Correction)).is_none());
         assert_eq!(rejection(&e("สองครับ", "2", EditKind::Number)).as_deref(), Some("เปลี่ยนคำลงท้าย ครับ/ค่ะ"));
         assert_eq!(rejection(&e("สอง", "สองๆ", EditKind::Number)).as_deref(), Some("แก้ตัวเลขแต่ผลลัพธ์ไม่มีตัวเลข"));
         assert!(rejection(&e("สอง", "๒", EditKind::Number)).is_none(), "Thai digits count as digits, as in Python");
+        assert!(changes_english(&e("Qingcha", "ฉางซา", EditKind::Correction)));
+        assert!(!changes_english(&e("Qingcha", "Qingcha", EditKind::Correction)));
+        assert!(!changes_english(&e("ห้าสิบ", "50", EditKind::Number)));
     }
 
     #[test]

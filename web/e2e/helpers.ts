@@ -48,3 +48,10 @@ export function watchErrors(page: Page) {
 export function row(page: Page, name: string) {
   return page.getByTestId("job-row").filter({ hasText: name }).first();
 }
+
+/** Wait until Gemini has finished transcription, correction, and summary without a human gate. */
+export async function finishProcessing(page: Page, timeout: number) {
+  const status = page.getByTestId("job-status");
+  await expect(status).toContainText("ถอดเสียงเสร็จแล้ว", { timeout });
+  await expect(page.locator("dialog.clarify-dlg")).toHaveCount(0);
+}

@@ -21,6 +21,10 @@ pub struct Config {
     pub admin_password: Option<String>,
     pub max_upload_bytes: u64,
     pub max_duration_sec: f64,
+    /// yt-dlp, which downloads videos for jobs created from a link (it needs deno in PATH for YouTube).
+    pub yt_dlp_bin: String,
+    /// Lets links point at localhost and private networks. Only for local testing.
+    pub url_import_allow_private: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -77,7 +81,9 @@ impl Config {
             cookie_secure: flag("COOKIE_SECURE", false),
             admin_password: var("ADMIN_PASSWORD"),
             max_upload_bytes: var("MAX_UPLOAD_BYTES").and_then(|v| v.parse().ok()).unwrap_or(2 * 1024 * 1024 * 1024),
-            max_duration_sec: var("MAX_DURATION_SEC").and_then(|v| v.parse().ok()).unwrap_or(3.0 * 3600.0),
+            max_duration_sec: var("MAX_DURATION_SEC").and_then(|v| v.parse().ok()).unwrap_or(5.0 * 3600.0),
+            yt_dlp_bin: var("YT_DLP_BIN").unwrap_or_else(|| "yt-dlp".into()),
+            url_import_allow_private: flag("URL_IMPORT_ALLOW_PRIVATE", false),
         }
     }
 

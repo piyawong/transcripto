@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::correct::{SpeakerRole, UNKNOWN_ROLE};
-use crate::lines::Line;
+use crate::lines::{Line, TimedToken};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Segment {
@@ -14,6 +14,7 @@ pub struct Segment {
     /// Index into the job's speaker list.
     pub speaker: usize,
     pub text: String,
+    pub tokens: Vec<TimedToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -50,7 +51,13 @@ pub fn build(lines: &[Line], corrected: &[String], roles: &[SpeakerRole]) -> (Ve
             speakers.push(Speaker { label: label.clone(), name, role });
             speakers.len() - 1
         });
-        segments.push(Segment { start: round2(line.start), end: round2(line.end.max(line.start + 0.2)), speaker: idx, text: text.to_string() });
+        segments.push(Segment {
+            start: round2(line.start),
+            end: round2(line.end.max(line.start + 0.2)),
+            speaker: idx,
+            text: text.to_string(),
+            tokens: line.tokens.clone(),
+        });
     }
     (segments, speakers)
 }

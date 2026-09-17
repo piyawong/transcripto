@@ -14,6 +14,8 @@ pkill -f "target/debug/transcripto-api" 2>/dev/null || true
 (cd api && cargo build --bin transcripto-api)
 if [ "${1:-}" = "--fixture" ]; then
   export AI_FIXTURE_DIR="$PWD/docs/rust-implementation/fixtures"
+  # e2e/link.spec.ts imports a video served from 127.0.0.1
+  export URL_IMPORT_ALLOW_PRIVATE=1
 fi
 (cd api && nohup ./target/debug/transcripto-api > ../.run/api.log 2>&1 &)
 

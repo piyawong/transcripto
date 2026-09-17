@@ -119,6 +119,17 @@ impl Storage {
         }
     }
 
+    pub async fn delete(&self, key: &str) -> Result<()> {
+        self.client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| anyhow!("object storage: delete {key}: {}", e.message().map(str::to_string).unwrap_or_else(|| format!("{e:?}"))))?;
+        Ok(())
+    }
+
     /// Whole object in memory (only for small objects such as stt.json); None when it does not exist.
     pub async fn get_bytes(&self, key: &str) -> Result<Option<Vec<u8>>> {
         match self.client.get_object().bucket(&self.bucket).key(key).send().await {

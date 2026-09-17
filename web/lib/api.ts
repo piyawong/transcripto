@@ -1,3 +1,5 @@
+import type { TimedToken } from "./words";
+
 export type JobStatus = "uploading" | "processing" | "done" | "failed";
 export type SummaryStatus = "waiting" | "pending" | "running" | "done" | "failed";
 
@@ -26,6 +28,11 @@ export interface Job {
   segment_count: number;
   summary_status: SummaryStatus;
   summary_error: string | null;
+  clarification_count: number;
+  /** A job created from a link whose video the server is still downloading (status stays "processing"). */
+  downloading: boolean;
+  /** Site of the link the job was created from; null for uploaded files. */
+  source_host: string | null;
   created_at: string;
   updated_at: string;
   finished_at: string | null;
@@ -36,6 +43,51 @@ export interface Segment {
   end: number;
   speaker: number;
   text: string;
+  tokens?: TimedToken[];
+}
+
+export type ClarificationDecision = "select" | "keep" | "skip" | "unknown";
+
+export interface ClarificationAnswer {
+  question_id: string;
+  decision: ClarificationDecision;
+  option_id?: string | null;
+  value?: string | null;
+}
+
+export interface ClarificationEvidence {
+  line: number;
+  start: number;
+  end: number;
+  timestamp: string;
+  text: string;
+  approximate: boolean;
+}
+
+export interface ClarificationQuestion {
+  id: string;
+  kind: "name_spelling" | "speaker_identity" | "word_or_term";
+  source: string;
+  impact: "high" | "medium" | "low";
+  impact_reason: string;
+  prompt: string;
+  occurrence_count: number;
+  evidence: ClarificationEvidence[];
+  options: { id: string; label: string }[];
+  recommended_option_id: string | null;
+  target:
+    | { kind: "text"; line: number; original: string }
+    | { kind: "text_group"; edits: { line: number; original: string }[] }
+    | { kind: "speaker"; index: number }
+    | null;
+  custom_label: string | null;
+}
+
+export interface ClarificationsResponse {
+  status: JobStatus;
+  revision: number;
+  questions: ClarificationQuestion[];
+  answers: { answers: ClarificationAnswer[] };
 }
 
 export interface Minutes {
@@ -50,9 +102,10 @@ export interface Minutes {
     start: string;
     end: string;
     details: string[];
+    report_sections?: { heading: string; paragraphs: string[]; items: string[]; numbered: boolean }[];
     quotes: { text: string; timestamp: string }[];
   }[];
-  action_items: { task: string; requested_by: string | null; owner: string | null; due: string | null; timestamps: string[] }[];
+  action_items: { task: string; requested_by: string | null; owner: string | null; due: string | null; assigned_on?: string | null; timestamps: string[] }[];
   needs_confirmation: { text: string; timestamps: string[] }[];
 }
 
@@ -64,8 +117,9 @@ export interface SummaryMeta {
 
 /** What the correction step did (transcript_meta.correct); absent on jobs transcribed before it existed. */
 export interface CorrectionMeta {
-  applied_correction: number;
-  applied_number: number;
+    applied_correction: number;
+    applied_number: number;
+    applied_name?: number;
   names_to_confirm: number;
   unclear: number;
 }

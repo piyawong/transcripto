@@ -1,0 +1,36 @@
+/* Transcripto speaker buddies — four character styles sharing the same parts and actions.
+   Layers: .bd-act (GSAP: pop / jump) > .bd-idle (CSS: breathe / sway / float) > .bd-body (GSAP: talk squash) */
+.bd { display: block; width: 100%; height: 100%; overflow: visible; }
+.bd .bd-ground { fill: rgb(10 17 51 / 0.14); }
+.bd .bd-fill { fill: var(--c); }
+.bd .bd-shade { fill: color-mix(in srgb, var(--c) 62%, #000); opacity: 0.32; }
+.bd .bd-light { fill: #fff; opacity: 0.5; }
+.bd .bd-dark { fill: #1a2456; }
+.bd .bd-pale { fill: #e8eef8; }
+.bd .bd-eye { fill: #0a1133; }
+.bd .bd-glint { fill: #fff; }
+.bd .bd-blush { fill: #ff7aa8; opacity: 0.6; }
+.bd .bd-mouth { fill: none; stroke: #0a1133; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.bd .bd-mouth-o { fill: #4a1230; }
+.bd .bd-tongue { fill: #ff7aa8; }
+.bd .bd-arcs path { fill: none; stroke: var(--c); stroke-width: 3.2; stroke-linecap: round; }
+.bd .bd-dots circle { fill: var(--c); }
+.bd .bd-spark { fill: #ffc93c; }
+.bd .bd-heart { fill: #ff5c8a; }
+.bd .bd-leaf { fill: #3ecf8e; }
+.bd .bd-leaf-2 { fill: #2fb67b; }
+.bd .bd-stem { fill: none; stroke: #2fb67b; stroke-width: 2.6; stroke-linecap: round; }
+
+.bd .bd-idle, .bd .bd-blink { transform-box: fill-box; }
+.bd .bd-idle { transform-origin: 50% 100%; animation: bd-breathe 2.4s ease-in-out infinite alternate; animation-delay: calc(var(--n, 0) * -0.7s); }
+.bd .bd-blink { transform-origin: 50% 50%; animation: bd-blink 4.6s infinite; animation-delay: calc(var(--n, 0) * -1.5s); }
+@keyframes bd-breathe { to { transform: scale(1.04, 0.955); } }
+@keyframes bd-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(0.08); } }
+
+.bd-mic .bd-idle { animation-name: bd-sway; animation-duration: 3s; }
+@keyframes bd-sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+.bd-bubbly .bd-idle { transform-origin: 50% 50%; animation-name: bd-float; animation-duration: 2.2s; }
+@keyframes bd-float { from { transform: translateY(1.5px) rotate(-2deg); } to { transform: translateY(-3.5px) rotate(2deg); } }
+.bd-sprout .bd-wiggle { transform-box: fill-box; transform-origin: 50% 100%; animation: bd-wiggle 1.6s ease-in-out infinite alternate; }
+@keyframes bd-wiggle { from { transform: rotate(-10deg); } to { transform: rotate(12deg); } }
+@media (prefers-reduced-motion: reduce) { .bd * { animation: none !important; } }

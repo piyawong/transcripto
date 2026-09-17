@@ -105,6 +105,7 @@ function Login() {
                   type="email"
                   inputMode="email"
                   autoComplete="username"
+                  placeholder="name@company.com"
                   value={email}
                   aria-invalid={!!emailErr}
                   aria-describedby="email-err"
@@ -132,6 +133,7 @@ function Login() {
                   name="password"
                   type={showPw ? "text" : "password"}
                   autoComplete="current-password"
+                  placeholder="อย่างน้อย 8 ตัวอักษร"
                   value={pw}
                   aria-invalid={!!pwErr}
                   aria-describedby="pw-err"
